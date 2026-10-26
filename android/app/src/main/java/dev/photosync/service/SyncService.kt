@@ -61,7 +61,9 @@ class SyncService : LifecycleService() {
             stopSelf()
             return START_NOT_STICKY
         }
-        return START_STICKY
+        // Do not resurrect the service after the process is killed: the server
+        // must only run when the user explicitly enables it.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {

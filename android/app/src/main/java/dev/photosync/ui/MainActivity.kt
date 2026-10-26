@@ -51,10 +51,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                LaunchedEffect(Unit) {
-                    dev.photosync.service.SyncService.start(applicationContext)
-                }
-
                 // The settings sheet can ask to jump straight into the folder picker.
                 val wantFolders by vm.openFolders.collectAsStateWithLifecycle()
                 LaunchedEffect(wantFolders) {

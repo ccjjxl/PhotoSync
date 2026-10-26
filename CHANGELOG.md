@@ -5,6 +5,15 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.3.3 — 2026-10-26
+
+### 变更
+- 两端统一为「启动 App 不自动开启同步服务」
+  - 安卓此前在 MainActivity 的 LaunchedEffect 中无条件启动服务，
+    与 iOS 行为相反；现在都需要用户手动点首页按钮开启
+  - SyncService 由 START_STICKY 改为 START_NOT_STICKY，
+    避免进程被杀后系统把服务拉起来（看起来像自动开启）
+
 ## 1.3.2 — 2026-10-26
 
 ### 修复
