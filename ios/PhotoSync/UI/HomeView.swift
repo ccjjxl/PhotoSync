@@ -10,7 +10,7 @@ struct HomeView: View {
     @State private var showHelp = false
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ScrollView {
                 VStack(spacing: 18) {
                     if !model.authorized {

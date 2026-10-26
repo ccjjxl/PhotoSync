@@ -54,6 +54,29 @@ ios/
         └── Components.swift         设计元素
 ```
 
+## 远程 Mac 打包（无外网环境）
+
+这台 Mac（`chucun@192.168.5.41`）**无法访问 GitHub / Homebrew**，所以装不了
+XcodeGen。工程用纯 Python 生成，不依赖任何第三方工具。
+
+```bash
+# 在开发机上（本仓库根目录）
+./ios/remote-build.sh                      # 构建模拟器版
+./ios/remote-build.sh --download           # 构建并拉回 dist/
+./ios/remote-build.sh --device             # 构建真机版（需签名）
+./ios/remote-build.sh --host user@host     # 指定其他 Mac
+```
+
+流程：`gen_xcodeproj.py` 生成工程 → `rsync` 推源码 → 远端 `xcodebuild` → 可选拉回产物。
+
+### 为什么不用 XcodeGen
+
+Mac 无外网，`brew install xcodegen` 不可行。`gen_xcodeproj.py` 只用标准库，
+生成 objectVersion 56 的 pbxproj（Xcode 14+ 可读），并带上共享 scheme，
+所以 `xcodebuild -scheme PhotoSync` 直接可用。
+
+改动 Swift 文件后无需维护工程文件——源文件按目录自动发现。
+
 ## 与安卓版的差异
 
 | 项目 | 安卓 | iOS |

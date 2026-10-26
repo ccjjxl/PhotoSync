@@ -12,7 +12,7 @@ struct SettingsView: View {
     @State private var showRotateTokenConfirm = false
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     deviceIdentity
