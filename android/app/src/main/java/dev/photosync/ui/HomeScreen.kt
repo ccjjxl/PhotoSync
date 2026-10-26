@@ -349,7 +349,15 @@ private fun HeroCard(
                                 color = Color.White.copy(alpha = 0.7f),
                             )
                         }
-                        SmallPill("浏览器打开") { onOpenUrl(primaryUrl) }
+                        SmallPill("浏览器打开") {
+                            // The gallery shell is public, but its data calls are
+                            // not: hand it the token via the query string.
+                            val token = state.settings?.token.orEmpty()
+                            onOpenUrl(
+                                if (token.isEmpty()) primaryUrl
+                                else "$primaryUrl/?token=$token",
+                            )
+                        }
                     }
                 }
 

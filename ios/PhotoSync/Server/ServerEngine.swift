@@ -116,6 +116,13 @@ final class ServerEngine: @unchecked Sendable {
             return ping()
         case "/api/pair":
             return pair(request)
+        // The gallery shell is public so a plain browser URL works. It holds no
+        // data on its own; the page authenticates every fetch with the token it
+        // receives via ?token=.
+        case "/", "/index.html":
+            return gallery(request)
+        case "/icon.png":
+            return .json(404, "{\"error\":\"no icon\"}")
         default:
             break
         }
@@ -131,7 +138,6 @@ final class ServerEngine: @unchecked Sendable {
         case "/api/list": return list(request)
         case "/api/thumb": return thumb(request)
         case "/api/file": return file(request)
-        case "/", "/index.html": return gallery(request)
         default: return json(404, ["error": "not found"])
         }
     }

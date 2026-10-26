@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var showAlbums = false
     @State private var showHelp = false
+    @State private var browserURL: URL?
 
     var body: some View {
         NavigationView {
@@ -43,6 +44,7 @@ struct HomeView: View {
             .sheet(isPresented: $showHelp) {
                 HelpView().environmentObject(model)
             }
+            .safariSheet(url: $browserURL)
         }
     }
 
@@ -130,9 +132,11 @@ struct HomeView: View {
                         }
                         Spacer()
                         PillButton(title: "浏览器打开") {
-                            if let url = URL(string: primary) {
-                                UIApplication.shared.open(url)
-                            }
+                            // Include the token: the gallery shell is public but
+                            // its data endpoints require authentication.
+                            let token = Settings.shared.snapshot().token
+                            let target = token.isEmpty ? primary : "\(primary)/?token=\(token)"
+                            browserURL = URL(string: target)
                         }
                     }
                     .padding(.horizontal, 14)

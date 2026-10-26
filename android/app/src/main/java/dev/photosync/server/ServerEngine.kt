@@ -129,6 +129,14 @@ class ServerEngine(
             when {
                 path == "/api/ping" -> ping(req)
                 path == "/api/pair" -> pair(req)
+                // The gallery shell is public so "open in browser" works without
+                // a token. It carries no data by itself; every API call the page
+                // makes still requires the token, which the page receives via
+                // ?token= when the user opens it from the app.
+                path == "/" || path == "/index.html" -> HttpResponse.bytes(
+                    WebGallery.HTML.toByteArray(), "text/html; charset=utf-8",
+                ).header("Cache-Control", "no-store")
+                path == "/icon.png" -> HttpResponse.bytes(WebGallery.ICON, "image/png", 86400)
                 else -> {
                     if (!authorized(req)) {
                         return HttpResponse.json(401, """{"error":"unauthorized"}""")
@@ -140,10 +148,6 @@ class ServerEngine(
                         path == "/api/list" -> list(req)
                         path == "/api/thumb" -> thumb(req)
                         path == "/api/file" -> file(req)
-                        path == "/" || path == "/index.html" -> HttpResponse.bytes(
-                            WebGallery.HTML.toByteArray(), "text/html; charset=utf-8",
-                        ).header("Cache-Control", "no-store")
-                        path == "/icon.png" -> HttpResponse.bytes(WebGallery.ICON, "image/png", 86400)
                         path.startsWith("/dl/") -> download(req)
                         else -> HttpResponse.json(404, """{"error":"not found"}""")
                     }
