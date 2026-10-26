@@ -9,8 +9,6 @@ struct HomeView: View {
     @State private var showAlbums = false
     @State private var showHelp = false
     @State private var browserURL: URL?
-    /// Mirrors Android's animated `glow` for the stop square.
-    @State private var stopGlow: CGFloat = 1
 
     var body: some View {
         NavigationView {
@@ -47,11 +45,6 @@ struct HomeView: View {
                 HelpView().environmentObject(model)
             }
             .safariSheet(url: $browserURL)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
-                    stopGlow = 0
-                }
-            }
         }
     }
 
@@ -113,9 +106,7 @@ struct HomeView: View {
                             .fill(model.running ? Color.white.opacity(0.2) : Color.white)
                             .frame(width: 64, height: 64)
                         if model.running {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.white.opacity(0.55 + 0.45 * stopGlow))
-                                .frame(width: 20, height: 20)
+                            StopSquare()
                         } else {
                             SyncGlyph(color: Color(red: 0.17, green: 0.42, blue: 1.0), size: 34)
                         }
@@ -415,5 +406,25 @@ struct HomeView: View {
             Spacer()
         }
         .padding(.horizontal, 8)
+    }
+}
+
+/// Pulsing stop square (Android animates `glow` between 0.55 and 1.0).
+///
+/// The animation is scoped to this leaf view. Driving `repeatForever` from
+/// HomeView state previously invalidated the whole screen every frame, which made
+/// the page appear to zoom in and out.
+private struct StopSquare: View {
+    @State private var dim = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color.white.opacity(dim ? 0.55 : 1.0))
+            .frame(width: 20, height: 20)
+            .animation(
+                .easeInOut(duration: 1.4).repeatForever(autoreverses: true),
+                value: dim
+            )
+            .onAppear { dim = true }
     }
 }

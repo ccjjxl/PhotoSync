@@ -5,6 +5,14 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.3.2 — 2026-10-26
+
+### 修复
+- iOS 首页出现持续的缩放/抖动
+  - 1.3.1 把「停止方块」的呼吸动画挂在 HomeView 的 `@State` 上用
+    `repeatForever` 驱动，导致整屏每帧重新布局，观感像页面在缩放
+  - 动画收敛到独立的叶子视图 `StopSquare`，只让该节点失效
+
 ## 1.3.1 — 2026-10-26
 
 ### 修复
