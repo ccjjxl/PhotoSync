@@ -2,7 +2,8 @@
 
 把手机相册**快速、增量**地同步到 Linux / Windows 电脑的完整方案。
 
-* **手机端** — Kotlin + Jetpack Compose 应用，内嵌一个零依赖的高性能 HTTP 服务，界面简洁美观，支持全量 / 增量、缩略图浏览、前台服务。
+* **安卓端** — Kotlin + Jetpack Compose 应用，内嵌一个零依赖的高性能 HTTP 服务，界面简洁美观，支持全量 / 增量、缩略图浏览、前台服务。
+* **iOS 端** — SwiftUI 应用（`ios/`），同一套 API，PhotoKit 相簿索引；需在 macOS 上编译。
 * **电脑端** — Go 编写的单文件命令行客户端（`sync-client`），支持自动发现、多线程并发、断点续传、增量清单、Web UI，Linux / Windows / macOS 通用。
 
 传输全程走局域网直连，不经过任何服务器。
@@ -32,7 +33,16 @@ cd android
 
 产物：`android/app/build/outputs/apk/release/PhotoSync-1.0.1.apk`
 
-**开发调试版**（包名带 `.debug` 后缀，可与正式版共存）：
+**iOS：**
+
+```bash
+cd ios
+./build.sh --open          # 需要在 macOS + Xcode 环境
+```
+
+详见 [`ios/README.md`](ios/README.md)（含权限、后台限制、HEIC 说明）。
+
+**安卓开发调试版**（包名带 `.debug` 后缀，可与正式版共存）：
 
 ```bash
 cd android && ./gradlew :app:assembleDebug
@@ -173,6 +183,19 @@ Windows 也可以在 `pc/` 目录下执行 `go build -o sync-client.exe .` 或�
 
 ---
 
+## 平台对比
+
+| | 安卓 | iOS |
+| --- | --- | --- |
+| 媒体索引 | MediaStore（真实文件路径） | PhotoKit（相簿） |
+| "文件夹" | `DCIM/Camera` 等路径 | 相簿名 → `DCIM/<相簿>/` |
+| 后台运行 | 前台服务，可长期后台 | 系统会挂起，传输需前台 |
+| 令牌存储 | SharedPreferences | 钥匙串 Keychain |
+| 编译环境 | 任意平台 | **仅 macOS** |
+| API / 发现协议 | 完全相同 | 完全相同 |
+
+电脑端对两者无差别：同一个 `sync-client` 二进制即可。
+
 ## 手机端功能
 
 * 一键开启 / 关闭同步服务（前台服务，退出界面也不中断）
@@ -306,6 +329,10 @@ photo_sync/
 │   │   ├── ui/                   Compose 界面
 │   │   └── util/                 网络工具
 │   └── build.gradle.kts
+├── ios/                          iOS 应用（SwiftUI + PhotoKit）
+│   ├── project.yml               XcodeGen 工程定义
+│   ├── build.sh                  构建脚本（仅 macOS）
+│   └── PhotoSync/{Core,Server,UI}
 └── pc/                           电脑客户端（Go，单文件二进制）
     ├── api.go                    HTTP 客户端 + UDP 发现
     ├── config.go                 多设备配置（每台独立 token / 目录 / 时间）
@@ -322,6 +349,10 @@ photo_sync/
 **找不到设备？**
 确认手机 App 中服务已开启、同一 Wi-Fi。客户端会自动兜底扫描全网段（应对路由器丢弃广播），
 若仍失败，直接用 `--host <手机IP>` 指定——这是最可靠的方式。
+
+**支持 iPhone 吗？**
+支持，见 [`ios/README.md`](ios/README.md)。API 与安卓完全相同，电脑端无需改动。
+注意 iOS 版必须在 macOS 上编译，且 App 进入后台后系统会暂停服务。
 
 **只想同步部分相簿（比如不传截图）？**
 在手机 App 首页「同步文件夹」→「选择」里取消勾选即可。被排除的相簿不会出现在

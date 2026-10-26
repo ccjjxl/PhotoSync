@@ -1,0 +1,57 @@
+name: PhotoSync
+options:
+  bundleIdPrefix: dev.photosync
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  PhotoSync:
+    type: application
+    platform: iOS
+    sources:
+      - path: PhotoSync
+    info:
+      path: PhotoSync/Info.plist
+      properties:
+        CFBundleDisplayName: PhotoSync
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIUserInterfaceStyle: Automatic
+        ITSAppUsesNonExemptEncryption: false
+        # PhotoKit: we only read the library.
+        NSPhotoLibraryUsageDescription: PhotoSync 需要读取相册，以便把你的照片和视频同步到自己的电脑。所有数据只在局域网内传输，不会上传到任何服务器。
+        NSPhotoLibraryAddUsageDescription: 仅在你主动选择"保存到相册"时才会写入。
+        # UDP broadcast discovery + local HTTP server (iOS 14+ prompt).
+        NSLocalNetworkUsageDescription: PhotoSync 需要在局域网内被你的电脑发现并传输照片。所有数据只在本地网络传输。
+        NSBonjourServices:
+          - _photosync._tcp
+          - _photosync._udp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.photosync
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO
+      configs:
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"

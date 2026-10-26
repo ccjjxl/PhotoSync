@@ -94,6 +94,20 @@ type DeviceInfo struct {
 	FolderFilter bool `json:"folderFilter"`
 	// Folders lists the enabled folders ("all" when unrestricted).
 	Folders string `json:"folders"`
+	// Platform is "android" or "ios"; older Android builds omit it.
+	Platform string `json:"platform"`
+}
+
+// PlatformLabel returns a short human label for logs.
+func (d DeviceInfo) PlatformLabel() string {
+	switch d.Platform {
+	case "ios":
+		return "iOS"
+	case "android":
+		return "Android"
+	default:
+		return "Android" // phone did not report it
+	}
 }
 
 // BestIP picks the device's preferred LAN address.
