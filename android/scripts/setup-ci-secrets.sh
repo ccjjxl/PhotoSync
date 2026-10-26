@@ -38,7 +38,43 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "")
+
+# ---------------------------------------------------------------------------
+# Pre-flight: writing Actions secrets needs an explicit permission that many
+# fine-grained PATs lack. Detect it up front instead of failing on a 403 midway.
+# ---------------------------------------------------------------------------
+if [ "$DRY" -eq 0 ] && [ -n "$REPO" ]; then
+  if ! gh api "repos/$REPO/actions/secrets/public-key" >/dev/null 2>&1; then
+    cat >&2 <<MSG
+✗ 当前 GitHub token 没有 Secrets 权限，无法写入 Actions Secrets。
+
+细粒度 PAT（github_pat_…）需要显式勾选：
+  仓库 Settings → 你正在使用的 token → Repository permissions
+    → Secrets : Read and write
+
+或者改用带有 repo scope 的经典 token / 浏览器登录：
+  gh auth login --web          # 重新授权（推荐，最省事）
+  gh auth refresh -s repo      # 或给现有登录补权限
+
+若不想改动 token，也可以在网页手动添加这 4 个 secret：
+  https://github.com/$REPO/settings/secrets/actions
+
+    ANDROID_KEYSTORE_BASE64 = <base64 编码的 jks，见下方命令>
+    ANDROID_STORE_PASSWORD  = <keystore.properties 里的 storePassword>
+    ANDROID_KEY_ALIAS       = $KEY_ALIAS
+    ANDROID_KEY_PASSWORD    = <keystore.properties 里的 keyPassword>
+
+生成 base64：base64 -w0 $KEYSTORE
+MSG
+    exit 1
+  fi
+fi
+
 B64=$(base64 -w0 "$KEYSTORE" 2>/dev/null || base64 -i "$KEYSTORE")
+B64_FILE=$(mktemp -t photosync-keystore-XXXXXX.b64)
+printf '%s' "$B64" > "$B64_FILE"
+chmod 600 "$B64_FILE"
 
 run() {
   if [ "$DRY" -eq 1 ]; then
@@ -48,7 +84,7 @@ run() {
   fi
 }
 
-echo "→ 上传 4 个 secret 到 $(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo '<repo>')"
+echo "→ 上传 4 个 secret 到 ${REPO:-<repo>}"
 
 if [ "$DRY" -eq 0 ]; then
   printf '%s' "$B64" | gh secret set ANDROID_KEYSTORE_BASE64
@@ -64,3 +100,4 @@ fi
 
 echo "✓ 完成。下次打 tag 时会产出正式签名的 APK。"
 echo "  验证: gh secret list"
+echo "  base64 副本: $B64_FILE（已写入，确认后请删除）"
