@@ -901,7 +901,7 @@ func runDiscover(args []string) int {
 			}
 		}
 		fmt.Printf("  %-24s %s\n", o.Device, o.BaseURL())
-		fmt.Printf("  %-24s 设备ID %s · Android %s · App %s · %s\n",
+		fmt.Printf("  %-24s 设备ID %s · %s · App %s · %s\n",
 			"", orDash(o.DeviceID), o.Model, o.Version, status)
 		fmt.Println()
 	}

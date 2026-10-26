@@ -18,6 +18,16 @@ android/keystore.properties
 *.p12
 !android/app/debug.keystore
 
+# iOS / Xcode
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+ios/DerivedData/
+ios/build/
+*.xcuserstate
+xcuserdata/
+*.ipa
+*.dSYM.zip
+
 # Go
 pc/dist/
 pc/sync-client
