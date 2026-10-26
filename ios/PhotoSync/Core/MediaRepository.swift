@@ -66,7 +66,7 @@ final class MediaRepository: @unchecked Sendable {
             let count = PHAsset.fetchAssets(in: collection, options: nil).count
             if count > 0 {
                 result.append(AlbumInfo(
-                    title: collection.localizedTitle ?? "未命名相簿",
+                    title: collection.localizedTitle ?? "未命名相册",
                     count: count,
                     identifier: collection.localIdentifier,
                     isSmart: false
@@ -86,7 +86,7 @@ final class MediaRepository: @unchecked Sendable {
             let count = PHAsset.fetchAssets(in: collection, options: nil).count
             if count > 0 {
                 result.append(AlbumInfo(
-                    title: collection.localizedTitle ?? "智能相簿",
+                    title: collection.localizedTitle ?? "智能相册",
                     count: count,
                     identifier: collection.localIdentifier,
                     isSmart: true

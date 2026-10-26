@@ -47,7 +47,7 @@ a{color:var(--acc);text-decoration:none}
   <span class="stat" id="stat"></span>
   <span class="grow"></span>
   <input id="q" placeholder="搜索文件名…" style="width:160px">
-  <select id="folder"><option value="">全部相簿</option></select>
+  <select id="folder"><option value="">全部相册</option></select>
   <select id="kind"><option value="all">全部</option><option value="img">照片</option><option value="vid">视频</option></select>
   <button id="refresh">刷新</button>
 </header>

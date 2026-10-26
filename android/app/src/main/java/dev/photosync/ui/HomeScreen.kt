@@ -150,7 +150,7 @@ fun HomeScreen(
         // ---------------------------------------------------------- folders
         if (state.folders.isNotEmpty()) {
             val filtering = state.selectedFolders.isNotEmpty()
-            SectionTitle("同步文件夹") {
+            SectionTitle("同步相册") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         if (filtering) "已选 ${state.selectedFolders.size}/${state.folders.size}"
@@ -192,8 +192,8 @@ fun HomeScreen(
                 val hidden = state.folders.size - shown.take(6).size
                 if (hidden > 0) {
                     Text(
-                        if (filtering) "另有 $hidden 个文件夹未选择同步…"
-                        else "另有 $hidden 个相簿…",
+                        if (filtering) "另有 $hidden 个相册未选择同步…"
+                        else "另有 $hidden 个相册…",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier

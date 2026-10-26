@@ -129,11 +129,18 @@ struct SyncGlyph: View {
 
 // MARK: - Formatting
 
+/// Formats a byte count the same way Android does ("0 B", "1.5 MB", "3.07 GB").
+///
+/// `ByteCountFormatter` renders 0 as "Zero KB" and omits the unit for small
+/// values, which looked wrong next to the Android app, so this is hand-rolled.
 func humanBytes(_ value: Int64) -> String {
-    let formatter = ByteCountFormatter()
-    formatter.countStyle = .file
-    formatter.allowedUnits = [.useKB, .useMB, .useGB]
-    return formatter.string(fromByteCount: value)
+    if value <= 0 { return "0 B" }
+    let kb = 1024.0, mb = kb * 1024, gb = mb * 1024
+    let v = Double(value)
+    if v >= gb { return String(format: "%.2f GB", v / gb) }
+    if v >= mb { return String(format: "%.1f MB", v / mb) }
+    if v >= kb { return String(format: "%.0f KB", v / kb) }
+    return "\(value) B"
 }
 
 func humanCount(_ value: Int) -> String {

@@ -46,11 +46,11 @@ fun FolderPickerContent(state: UiState, vm: MainViewModel) {
     val filtering = selected.isNotEmpty()
     var query by remember { mutableStateOf("") }
 
-    Text("选择同步文件夹", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+    Text("选择同步相册", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(6.dp))
     Text(
-        if (filtering) "只同步勾选的 ${selected.size} 个文件夹"
-        else "当前同步全部 ${all.size} 个文件夹",
+        if (filtering) "只同步勾选的 ${selected.size} 个相册"
+        else "当前同步全部 ${all.size} 个相册",
         style = MaterialTheme.typography.bodyMedium,
         color = if (filtering) MaterialTheme.colorScheme.primary
         else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -94,7 +94,7 @@ fun FolderPickerContent(state: UiState, vm: MainViewModel) {
 
     if (visible.isEmpty()) {
         Text(
-            if (all.isEmpty()) "还没有读取到相簿，请授予权限后重试。" else "没有匹配「$query」的文件夹",
+            if (all.isEmpty()) "还没有读取到相册，请授予权限后重试。" else "没有匹配「$query」的相册",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(vertical = 20.dp),
@@ -128,8 +128,8 @@ fun FolderPickerContent(state: UiState, vm: MainViewModel) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "· 被排除的文件夹不会出现在电脑端和网页相册里，也不会被传输。\n" +
-                    "· 电脑端按相同目录结构保存，未勾选的相簿不会创建。\n" +
+                "· 被排除的相册不会出现在电脑端和网页相册里，也不会被传输。\n" +
+                    "· 电脑端按相同目录结构保存，未勾选的相册不会创建。\n" +
                     "· 修改后立即生效，无需重启服务。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

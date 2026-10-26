@@ -26,10 +26,10 @@ struct AlbumPickerView: View {
                 list
             }
             .background(Theme.pageBackground)
-            .navigationTitle("选择同步相簿")
+            .navigationTitle("选择同步相册")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "搜索相簿")
+                        prompt: "搜索相册")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("完成") { dismiss() }
@@ -41,11 +41,11 @@ struct AlbumPickerView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(filtering
-                 ? "只同步勾选的 \(model.selectedAlbums.count) 个相簿"
-                 : "当前同步全部 \(model.albums.count) 个相簿")
+                 ? "只同步勾选的 \(model.selectedAlbums.count) 个相册"
+                 : "当前同步全部 \(model.albums.count) 个相册")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(filtering ? Theme.accent : Color.secondary)
-            Text("被排除的相簿不会出现在电脑端和网页相册里，也不会被传输。")
+            Text("被排除的相册不会出现在电脑端和网页相册里，也不会被传输。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -92,8 +92,8 @@ struct AlbumPickerView: View {
             VStack(spacing: 8) {
                 if visibleAlbums.isEmpty {
                     Text(model.albums.isEmpty
-                         ? "还没有读取到相簿，请先授予权限。"
-                         : "没有匹配「\(search)」的相簿")
+                         ? "还没有读取到相册，请先授予权限。"
+                         : "没有匹配「\(search)」的相册")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 30)
@@ -115,7 +115,7 @@ struct AlbumPickerView: View {
                 Text(album.title)
                     .font(.subheadline)
                     .lineLimit(1)
-                Text("\(album.count) 个\(album.isSmart ? " · 智能相簿" : "")")
+                Text("\(album.count) 个\(album.isSmart ? " · 智能相册" : "")")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

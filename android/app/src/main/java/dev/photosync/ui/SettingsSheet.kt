@@ -187,11 +187,11 @@ private fun SettingsContent(state: UiState, vm: MainViewModel) {
 
     // ---------------------------------------------------------- folders
     Column(Modifier.padding(bottom = 18.dp)) {
-        Text("同步文件夹", style = MaterialTheme.typography.titleMedium)
+        Text("同步相册", style = MaterialTheme.typography.titleMedium)
         Text(
             if (state.selectedFolders.isEmpty())
-                "当前同步全部 ${state.allFolders.size} 个文件夹"
-            else "只同步已选的 ${state.selectedFolders.size} 个文件夹",
+                "当前同步全部 ${state.allFolders.size} 个相册"
+            else "只同步已选的 ${state.selectedFolders.size} 个相册",
             style = MaterialTheme.typography.bodySmall,
             color = if (state.selectedFolders.isEmpty())
                 MaterialTheme.colorScheme.onSurfaceVariant
@@ -209,7 +209,7 @@ private fun SettingsContent(state: UiState, vm: MainViewModel) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "选择要同步的文件夹",
+                "选择要同步的相册",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
@@ -403,7 +403,7 @@ private fun LibraryContent(state: UiState, vm: MainViewModel) {
     }
     Spacer(Modifier.height(18.dp))
     Text(
-        "全部 ${state.folders.size} 个相簿",
+        "全部 ${state.folders.size} 个相册",
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

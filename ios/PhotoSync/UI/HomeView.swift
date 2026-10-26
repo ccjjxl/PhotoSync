@@ -247,7 +247,7 @@ struct HomeView: View {
     private var albumSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("同步相簿")
+                Text("同步相册")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -299,8 +299,8 @@ struct HomeView: View {
                     showAlbums = true
                 } label: {
                     Text(model.selectedAlbums.isEmpty
-                         ? "另有 \(visibleAlbums.count - 6) 个相簿…"
-                         : "另有 \(visibleAlbums.count - 6) 个已选相簿…")
+                         ? "另有 \(visibleAlbums.count - 6) 个相册…"
+                         : "另有 \(visibleAlbums.count - 6) 个已选相册…")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

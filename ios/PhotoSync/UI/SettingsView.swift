@@ -23,9 +23,9 @@ struct SettingsView: View {
                     Divider()
                     switches
                     Divider()
-                    storageSection
-                    Divider()
                     securityCard
+                    Divider()
+                    storageSection
                     systemButton
                 }
                 .padding(20)
@@ -139,17 +139,17 @@ struct SettingsView: View {
 
     private var albumSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("同步相簿")
+            Text("同步相册")
                 .font(.subheadline.weight(.medium))
             Text(model.selectedAlbums.isEmpty
-                 ? "当前同步全部 \(model.albums.count) 个相簿"
-                 : "只同步已选的 \(model.selectedAlbums.count) 个相簿")
+                 ? "当前同步全部 \(model.albums.count) 个相册"
+                 : "只同步已选的 \(model.selectedAlbums.count) 个相册")
                 .font(.caption)
                 .foregroundStyle(model.selectedAlbums.isEmpty ? .secondary : Theme.accent)
             Button {
                 showAlbums = true
             } label: {
-                Text("选择要同步的相簿")
+                Text("选择要同步的相册")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(Theme.accent)
                     .frame(maxWidth: .infinity)
