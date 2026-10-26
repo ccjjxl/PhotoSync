@@ -54,10 +54,10 @@ final class Settings: @unchecked Sendable {
         defer { lock.unlock() }
 
         if loadToken().isEmpty {
-            saveToken(Self.randomHex(24))
+            saveToken(Settings.randomHex(24))
         }
         if defaults.string(forKey: Key.pairingCode) == nil {
-            defaults.set(Self.randomCode(), forKey: Key.pairingCode)
+            defaults.set(Settings.randomCode(), forKey: Key.pairingCode)
         }
         if defaults.string(forKey: Key.deviceId)?.isEmpty ?? true {
             defaults.set(randomHex(4), forKey: Key.deviceId)
@@ -70,7 +70,7 @@ final class Settings: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return Snapshot(
-            port: defaults.object(forKey: Key.port) as? Int ?? Self.defaultPort,
+            port: defaults.object(forKey: Key.port) as? Int ?? Settings.defaultPort,
             includeVideos: defaults.object(forKey: Key.includeVideos) as? Bool ?? true,
             openAccess: defaults.object(forKey: Key.openAccess) as? Bool ?? false,
             pairingCode: defaults.string(forKey: Key.pairingCode) ?? "000000",
@@ -132,13 +132,13 @@ final class Settings: @unchecked Sendable {
 
     func rotatePairingCode() {
         lock.lock()
-        defaults.set(Self.randomCode(), forKey: Key.pairingCode)
+        defaults.set(Settings.randomCode(), forKey: Key.pairingCode)
         lock.unlock()
     }
 
     func rotateToken() {
         lock.lock()
-        saveToken(Self.randomHex(24))
+        saveToken(Settings.randomHex(24))
         lock.unlock()
     }
 
@@ -151,7 +151,7 @@ final class Settings: @unchecked Sendable {
         defer { lock.unlock() }
 
         var copy = Snapshot(
-            port: defaults.object(forKey: Key.port) as? Int ?? Self.defaultPort,
+            port: defaults.object(forKey: Key.port) as? Int ?? Settings.defaultPort,
             includeVideos: defaults.object(forKey: Key.includeVideos) as? Bool ?? true,
             openAccess: defaults.object(forKey: Key.openAccess) as? Bool ?? false,
             pairingCode: defaults.string(forKey: Key.pairingCode) ?? "000000",

@@ -190,7 +190,7 @@ final class MediaRepository: @unchecked Sendable {
 
         let name = resource?.originalFilename ?? defaultName(for: asset)
         let size = resourceSize(resource) ?? 0
-        let mime = Self.mimeType(for: name, isVideo: asset.mediaType == .video)
+        let mime = MediaRepository.mimeType(for: name, isVideo: asset.mediaType == .video)
         let safeAlbum = album.replacingOccurrences(of: "/", with: "_")
 
         return MediaItem(
