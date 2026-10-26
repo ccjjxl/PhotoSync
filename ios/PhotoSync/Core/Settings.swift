@@ -60,7 +60,7 @@ final class Settings: @unchecked Sendable {
             defaults.set(Settings.randomCode(), forKey: Key.pairingCode)
         }
         if defaults.string(forKey: Key.deviceId)?.isEmpty ?? true {
-            defaults.set(randomHex(4), forKey: Key.deviceId)
+            defaults.set(Settings.randomHex(4), forKey: Key.deviceId)
         }
     }
 
