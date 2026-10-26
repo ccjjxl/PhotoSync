@@ -48,13 +48,13 @@ struct HelpView: View {
                             Text("API（供自建脚本使用）")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            ForEach(apiRows, id: \.0) { row in
+                            ForEach(apiRows) { row in
                                 HStack(alignment: .top) {
-                                    Text(row.0)
+                                    Text(row.endpoint)
                                         .font(.caption2.monospaced())
                                         .foregroundStyle(Theme.accent)
                                         .frame(maxWidth: .infinity, alignment: .leading)
-                                    Text(row.1)
+                                    Text(row.detail)
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -83,13 +83,20 @@ struct HelpView: View {
         }
     }
 
-    private var apiRows: [(String, String)] {
+    /// One row in the API reference table.
+    private struct ApiRow: Identifiable {
+        let id = UUID()
+        let endpoint: String
+        let detail: String
+    }
+
+    private var apiRows: [ApiRow] {
         [
-            ("GET /api/info", "设备与库概况"),
-            ("POST /api/pair {code}", "换取 token"),
-            ("GET /api/list?since=ts", "增量列表"),
-            ("GET /api/file?id=…", "原始文件"),
-            ("GET /api/thumb?id=…", "缩略图"),
+            ApiRow(endpoint: "GET /api/info", detail: "设备与库概况"),
+            ApiRow(endpoint: "POST /api/pair {code}", detail: "换取 token"),
+            ApiRow(endpoint: "GET /api/list?since=ts", detail: "增量列表"),
+            ApiRow(endpoint: "GET /api/file?id=…", detail: "原始文件"),
+            ApiRow(endpoint: "GET /api/thumb?id=…", detail: "缩略图"),
         ]
     }
 

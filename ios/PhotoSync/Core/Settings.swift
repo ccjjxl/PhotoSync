@@ -7,7 +7,7 @@ import UIKit
 /// Uses `UserDefaults` for plain values; the pairing token lives in the
 /// Keychain so it survives reinstalls less often than UserDefaults and is not
 /// included in unencrypted backups.
-final class Settings {
+final class Settings: @unchecked Sendable {
 
     static let shared = Settings()
 
@@ -54,7 +54,7 @@ final class Settings {
         defer { lock.unlock() }
 
         if loadToken().isEmpty {
-            saveToken(randomHex(24))
+            saveToken(Self.randomHex(24))
         }
         if defaults.string(forKey: Key.pairingCode) == nil {
             defaults.set(Self.randomCode(), forKey: Key.pairingCode)
@@ -138,18 +138,33 @@ final class Settings {
 
     func rotateToken() {
         lock.lock()
-        saveToken(randomHex(24))
+        saveToken(Self.randomHex(24))
         lock.unlock()
     }
 
+    /// Applies a change to the three simple toggles without re-entering `lock`.
+    ///
+    /// `snapshot()` already takes the lock, so calling it here would deadlock on
+    /// a non-recursive NSLock.
     private func mutate(_ block: (inout Snapshot) -> Void) {
-        var copy = snapshot()
-        block(&copy)
         lock.lock()
+        defer { lock.unlock() }
+
+        var copy = Snapshot(
+            port: defaults.object(forKey: Key.port) as? Int ?? Self.defaultPort,
+            includeVideos: defaults.object(forKey: Key.includeVideos) as? Bool ?? true,
+            openAccess: defaults.object(forKey: Key.openAccess) as? Bool ?? false,
+            pairingCode: defaults.string(forKey: Key.pairingCode) ?? "000000",
+            token: loadToken(),
+            deviceId: defaults.string(forKey: Key.deviceId) ?? "",
+            deviceName: defaults.string(forKey: Key.deviceName) ?? "",
+            selectedAlbums: currentAlbumsLocked()
+        )
+        block(&copy)
+
         defaults.set(copy.port, forKey: Key.port)
         defaults.set(copy.includeVideos, forKey: Key.includeVideos)
         defaults.set(copy.openAccess, forKey: Key.openAccess)
-        lock.unlock()
     }
 
     // MARK: - Derived names

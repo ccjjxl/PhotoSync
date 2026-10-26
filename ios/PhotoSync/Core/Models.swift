@@ -5,7 +5,7 @@ import Photos
 ///
 /// `relPath` mirrors the Android app's layout so the PC client can treat both
 /// platforms identically: `DCIM/<album>/<filename>`.
-struct MediaItem {
+struct MediaItem: Sendable {
     let id: String            // PHAsset.localIdentifier
     let name: String          // original filename, e.g. IMG_1234.HEIC
     let album: String         // album / folder name shown to the client
@@ -56,7 +56,7 @@ struct MediaItem {
 }
 
 /// An album the user can choose to sync (or exclude).
-struct AlbumInfo {
+struct AlbumInfo: Sendable {
     let title: String
     let count: Int
     let identifier: String

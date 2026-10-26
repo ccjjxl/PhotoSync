@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Network
 import UIKit
@@ -55,7 +56,7 @@ enum NetworkInfo {
 /// The PC broadcasts `PHOTOSYNC/1 DISCOVER` to port 8738 and expects an OFFER
 /// back on the same socket. iOS requires local-network permission before
 /// broadcast sockets work, which the first request triggers.
-final class DiscoveryResponder {
+final class DiscoveryResponder: @unchecked Sendable {
 
     static let discoveryPort: UInt16 = 8738
     static let magic = "PHOTOSYNC/1"

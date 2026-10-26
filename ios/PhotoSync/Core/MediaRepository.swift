@@ -11,11 +11,15 @@ import UIKit
 ///     DCIM/<album name>/<original filename>
 ///
 /// which keeps the desktop client identical across platforms.
-final class MediaRepository {
+final class MediaRepository: @unchecked Sendable {
 
     static let shared = MediaRepository()
 
     private let imageManager = PHCachingImageManager()
+
+    /// PhotoKit is not thread-safe and this type is a shared singleton, so every
+    /// entry point serialises through this lock.
+    private let lock = NSRecursiveLock()
 
     // MARK: - Authorization
 
@@ -50,6 +54,8 @@ final class MediaRepository {
 
     /// Every album with at least one asset, newest content first.
     func albums() -> [AlbumInfo] {
+        lock.lock()
+        defer { lock.unlock() }
         var result: [AlbumInfo] = []
 
         // User albums (including "Recents" if present).
@@ -100,6 +106,8 @@ final class MediaRepository {
     ///   - albums: album titles to include; empty means "all".
     ///   - includeVideos: whether videos participate.
     func query(since: Int = 0, albums: Set<String>, includeVideos: Bool) -> [MediaItem] {
+        lock.lock()
+        defer { lock.unlock() }
         let options = PHFetchOptions()
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
 
@@ -239,11 +247,15 @@ final class MediaRepository {
     // MARK: - Asset access
 
     func asset(for id: String) -> PHAsset? {
-        PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
+        lock.lock()
+        defer { lock.unlock() }
+        return PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
     }
 
     /// Streams the original bytes of an asset to a URL (used for HTTP responses).
     func writeOriginal(for asset: PHAsset, to url: URL) throws {
+        lock.lock()
+        defer { lock.unlock() }
         let resources = PHAssetResource.assetResources(for: asset)
         let resource = resources.first { $0.type == .fullSizePhoto || $0.type == .photo }
             ?? resources.first { $0.type == .fullSizeVideo || $0.type == .video }
@@ -268,6 +280,8 @@ final class MediaRepository {
 
     /// Decodes a thumbnail for grid display / the `/api/thumb` endpoint.
     func thumbnail(for asset: PHAsset, size: CGSize) -> Data? {
+        lock.lock()
+        defer { lock.unlock() }
         let options = PHImageRequestOptions()
         options.deliveryMode = .highQualityFormat
         options.resizeMode = .fast

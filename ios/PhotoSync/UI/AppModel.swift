@@ -45,6 +45,24 @@ final class AppModel: ObservableObject {
         let isVideo: Bool
     }
 
+    /// Value passed back from the background PhotoKit work.
+    ///
+    /// `UIImage` is immutable once created, so it is safe to hand across actors;
+    /// the compiler cannot prove that on its own.
+    private struct ThumbPayload: @unchecked Sendable {
+        let id: String
+        let image: UIImage
+        let isVideo: Bool
+    }
+
+    private struct LibrarySnapshot: @unchecked Sendable {
+        let albums: [AlbumInfo]
+        let photos: Int
+        let videos: Int
+        let bytes: Int64
+        let thumbs: [ThumbPayload]
+    }
+
     private let settings = Settings.shared
     private let repository = MediaRepository.shared
     private let engine = ServerEngine.shared
@@ -183,32 +201,38 @@ final class AppModel: ObservableObject {
         let snapshot = settings.snapshot()
         let selected = snapshot.selectedAlbums
 
-        Task.detached(priority: .utility) { [weak self] in
+        // PhotoKit work is synchronous and can take a moment on large libraries,
+        // so it must not run on the main actor.
+        Task { [weak self] in
+            let loaded = await Task.detached(priority: .utility) { () -> LibrarySnapshot in
+                let albumList = MediaRepository.shared.albums()
+                let all = MediaRepository.shared.query(
+                    albums: selected, includeVideos: snapshot.includeVideos
+                )
+                var thumbs: [ThumbPayload] = []
+                for item in all.prefix(12) {
+                    guard let asset = MediaRepository.shared.asset(for: item.id),
+                          let data = MediaRepository.shared.thumbnail(
+                            for: asset, size: CGSize(width: 240, height: 240)),
+                          let image = UIImage(data: data) else { continue }
+                    thumbs.append(ThumbPayload(id: item.id, image: image, isVideo: item.isVideo))
+                }
+                return LibrarySnapshot(
+                    albums: albumList,
+                    photos: all.filter { !$0.isVideo }.count,
+                    videos: all.filter { $0.isVideo }.count,
+                    bytes: all.reduce(Int64(0)) { $0 + $1.size },
+                    thumbs: thumbs
+                )
+            }.value
+
             guard let self else { return }
-            let albumList = MediaRepository.shared.albums()
-            let all = MediaRepository.shared.query(
-                albums: selected, includeVideos: snapshot.includeVideos
-            )
-            let photos = all.filter { !$0.isVideo }.count
-            let videos = all.filter { $0.isVideo }.count
-            let bytes = all.reduce(Int64(0)) { $0 + $1.size }
-
-            // Build a handful of thumbnails for the "recent" strip.
-            var thumbs: [RecentThumb] = []
-            for item in all.prefix(12) {
-                guard let asset = MediaRepository.shared.asset(for: item.id),
-                      let data = MediaRepository.shared.thumbnail(
-                        for: asset, size: CGSize(width: 240, height: 240)),
-                      let image = UIImage(data: data) else { continue }
-                thumbs.append(RecentThumb(id: item.id, image: image, isVideo: item.isVideo))
-            }
-
-            await MainActor.run {
-                self.albums = albumList
-                self.photos = photos
-                self.videos = videos
-                self.bytes = bytes
-                self.recentThumbnails = thumbs
+            self.albums = loaded.albums
+            self.photos = loaded.photos
+            self.videos = loaded.videos
+            self.bytes = loaded.bytes
+            self.recentThumbnails = loaded.thumbs.map {
+                RecentThumb(id: $0.id, image: $0.image, isVideo: $0.isVideo)
             }
         }
     }

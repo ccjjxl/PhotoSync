@@ -17,7 +17,7 @@ import UIKit
 ///
 /// JSON is produced with `JSONSerialization` rather than string interpolation:
 /// filenames and album titles are user data and must be escaped properly.
-final class ServerEngine {
+final class ServerEngine: @unchecked Sendable {
 
     static let shared = ServerEngine()
 

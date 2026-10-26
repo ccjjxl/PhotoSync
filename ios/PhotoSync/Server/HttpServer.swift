@@ -7,7 +7,7 @@ import Network
 /// only needs a small subset, so this is intentionally byte-level:
 /// GET/HEAD/POST, keep-alive, Range (resume), ETag, Content-Length.
 /// Not supported (and not needed): chunked encoding, HTTP/2, TLS.
-final class HttpServer {
+final class HttpServer: @unchecked Sendable {
 
     // MARK: - Request / Response
 
