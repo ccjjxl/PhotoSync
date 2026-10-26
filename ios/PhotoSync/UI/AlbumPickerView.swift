@@ -44,7 +44,7 @@ struct AlbumPickerView: View {
                  ? "只同步勾选的 \(model.selectedAlbums.count) 个相簿"
                  : "当前同步全部 \(model.albums.count) 个相簿")
                 .font(.subheadline.weight(.medium))
-                .foregroundStyle(filtering ? Theme.accent : .secondary)
+                .foregroundStyle(filtering ? Theme.accent : Color.secondary)
             Text("被排除的相簿不会出现在电脑端和网页相册里，也不会被传输。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -151,7 +151,7 @@ struct AlbumPickerView: View {
     private func checkMark(checked: Bool) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(checked ? Theme.accent : .clear)
+                .fill(checked ? Theme.accent : Color.clear)
                 .frame(width: 22, height: 22)
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(checked ? Theme.accent : Color(.separator), lineWidth: 1.5)

@@ -166,17 +166,30 @@ jobs:
       - name: Verify signature and zipalign
         working-directory: android
         run: |
+          set -euo pipefail
           APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-          echo "APK=$APK" >> "$GITHUB_ENV"
+          if [ -z "$APK" ]; then
+            echo "::error::没有生成 APK"
+            exit 1
+          fi
+          echo "APK=$APK"
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
           "$BT/zipalign" -c -v 4 "$APK" > /dev/null && echo "✓ zipalign ok"
-          "$BT/apksigner" verify --verbose "$APK" | head -20 || true
           "$BT/apksigner" verify --print-certs "$APK" 2>/dev/null | grep -E "Signer #1" || true
+          # A debug-signed "release" still installs, but cannot upgrade a
+          # properly signed install; surface that rather than failing silently.
+          if "$BT/apksigner" verify --print-certs "$APK" 2>/dev/null | grep -q "CN=Android Debug"; then
+            echo "::warning::APK 使用 debug 签名（未配置 ANDROID_KEYSTORE_BASE64）"
+          else
+            echo "✓ 使用正式签名"
+          fi
 
       - name: Stage artifact
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          set -euo pipefail
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
           mkdir -p out
           cp "$APK" "out/PhotoSync-android-v${VERSION}.apk"
           ls -lh out
@@ -217,6 +230,7 @@ jobs:
       - name: Build for simulator
         working-directory: ios
         run: |
+          set -o pipefail
           xcodebuild \
             -project PhotoSync.xcodeproj \
             -scheme PhotoSync \
@@ -226,7 +240,17 @@ jobs:
             -derivedDataPath build \
             MARKETING_VERSION="${{ steps.version.outputs.version }}" \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build 2>&1 | tee build.log
+
+      - name: Report errors
+        if: failure()
+        working-directory: ios
+        run: |
+          if [ -f build.log ]; then
+            grep -E "error:" build.log | head -40 | while IFS= read -r line; do
+              echo "::error title=Swift build::$line"
+            done
+          fi
 
       - name: Package simulator app
         env:

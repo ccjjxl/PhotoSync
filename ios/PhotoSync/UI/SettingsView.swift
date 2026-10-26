@@ -78,7 +78,7 @@ struct SettingsView: View {
                         .padding(.horizontal, 18)
                         .padding(.vertical, 13)
                         .background(canApplyName ? Theme.accent : Color(.tertiarySystemFill))
-                        .foregroundStyle(canApplyName ? .white : .secondary)
+                        .foregroundStyle(canApplyName ? Color.white : Color.secondary)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -113,7 +113,7 @@ struct SettingsView: View {
                         .padding(.horizontal, 18)
                         .padding(.vertical, 13)
                         .background(canApplyPort ? Theme.accent : Color(.tertiarySystemFill))
-                        .foregroundStyle(canApplyPort ? .white : .secondary)
+                        .foregroundStyle(canApplyPort ? Color.white : Color.secondary)
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)

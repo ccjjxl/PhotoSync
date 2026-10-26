@@ -63,7 +63,7 @@ struct HomeView: View {
                 PulseDot(color: Theme.mint, active: model.running)
                 Text(model.running ? "运行中" : "已停止")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(model.running ? Theme.mint : .secondary)
+                    .foregroundStyle(model.running ? Theme.mint : Color.secondary)
             }
             Button {
                 showSettings = true

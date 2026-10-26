@@ -55,3 +55,13 @@ targets:
       configs:
         Release:
           SWIFT_OPTIMIZATION_LEVEL: "-O"
+
+schemes:
+  PhotoSync:
+    build:
+      targets:
+        PhotoSync: all
+    run:
+      config: Debug
+    archive:
+      config: Release

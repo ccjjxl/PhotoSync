@@ -33,9 +33,14 @@ jobs:
         working-directory: ios
         run: xcodegen generate
 
+      - name: List schemes
+        working-directory: ios
+        run: xcodebuild -project PhotoSync.xcodeproj -list
+
       - name: Build for simulator
         working-directory: ios
         run: |
+          set -o pipefail
           xcodebuild \
             -project PhotoSync.xcodeproj \
             -scheme PhotoSync \
@@ -43,7 +48,30 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build 2>&1 | tee build.log
+
+      # Surface compiler errors as workflow annotations so they are visible
+      # without downloading the full log.
+      - name: Report errors
+        if: failure()
+        working-directory: ios
+        run: |
+          if [ -f build.log ]; then
+            grep -E "error:|warning: .*never used" build.log | head -40 || true
+            echo "---"
+            grep -E "error:" build.log | head -40 | while IFS= read -r line; do
+              echo "::error title=Swift build::$line"
+            done
+          fi
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-log
+          path: ios/build.log
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: SwiftLint (advisory)
         continue-on-error: true
