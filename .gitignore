@@ -34,6 +34,11 @@ pc/dist/
 pc/release/
 pc/sync-client
 pc/sync-client.exe
+pc/photosync
+
+# Python
+__pycache__/
+*.pyc
 
 # OS / editors
 .DS_Store

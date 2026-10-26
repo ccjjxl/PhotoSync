@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -63,12 +64,24 @@ func OpenManifest(outDir, device string) (*Manifest, error) {
 	return m, nil
 }
 
-// Get returns the entry for a remote path.
-func (m *Manifest) Get(remotePath string) (Entry, bool) {
+// Get returns the entry for a key produced by manifestKey.
+//
+// Older manifests are keyed by remote path only; those are still honoured so an
+// upgrade does not trigger a full re-download.
+func (m *Manifest) Get(key string) (Entry, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	e, ok := m.Entries[remotePath]
-	return e, ok
+
+	if e, ok := m.Entries[key]; ok {
+		return e, true
+	}
+	// Fallback: "path#id" -> "path" for manifests written before ids were added.
+	if hash := strings.LastIndex(key, "#"); hash > 0 {
+		if e, ok := m.Entries[key[:hash]]; ok {
+			return e, true
+		}
+	}
+	return Entry{}, false
 }
 
 // Put records a successful transfer.

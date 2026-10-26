@@ -3,7 +3,6 @@ package dev.photosync.server
 import dev.photosync.util.Net
 import java.net.DatagramPacket
 import java.net.DatagramSocket
-import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -52,7 +51,13 @@ class DiscoveryResponder(
                     val cmd = msg.removePrefix(MAGIC).trim().uppercase()
                     if (!cmd.startsWith("DISCOVER")) continue
 
-                    val reply = buildOffer()
+                    // Never let one malformed reply kill the whole responder:
+                    // skip this probe, log why, and keep listening.
+                    val reply = runCatching { buildOffer() }
+                        .onFailure {
+                            android.util.Log.w("PhotoSync", "discovery offer failed", it)
+                        }
+                        .getOrNull() ?: continue
                     val bytes = reply.toByteArray()
                     sock.send(DatagramPacket(bytes, bytes.size, packet.address, packet.port))
                 } catch (_: java.net.SocketTimeoutException) {
@@ -84,7 +89,7 @@ class DiscoveryResponder(
         field("port", portProvider())
         field("openAccess", openAccessProvider())
         field("folderFilter", folderFilterProvider())
-        field("host", InetAddress.getLocalHost().hostName ?: "")
+        field("host", "android")
         arr("addresses") {
             Net.localAddresses().forEach { a ->
                 obj {

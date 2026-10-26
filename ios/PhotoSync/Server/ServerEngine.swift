@@ -98,6 +98,7 @@ final class ServerEngine: @unchecked Sendable {
         server = nil
         discovery.stop()
         running = false
+        lastError = nil
         onStateChange?()
     }
 

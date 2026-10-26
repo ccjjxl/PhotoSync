@@ -151,10 +151,14 @@ struct SettingsView: View {
             } label: {
                 Text("选择要同步的相册")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
-                    .background(Theme.accent.opacity(0.12))
+                    .background(Theme.accent.opacity(0.16))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(Color(.separator).opacity(0.5), lineWidth: 1)
+                    )
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
@@ -228,47 +232,54 @@ struct SettingsView: View {
         }
     }
 
+    /// Pairing code + token — Android shows this under a "安全" heading.
+    /// Pairing code + token — Android shows this under a "安全" heading.
     private var securityCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("配对码").font(.subheadline)
-                        Text(model.pairingCode)
-                            .font(.system(.title2, design: .monospaced).weight(.semibold))
-                            .tracking(5)
-                            .foregroundStyle(Theme.accent)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("安全")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            Card {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("配对码").font(.subheadline)
+                            Text(model.pairingCode)
+                                .font(.system(.title2, design: .monospaced).weight(.semibold))
+                                .tracking(5)
+                                .foregroundStyle(Theme.accent)
+                        }
+                        Spacer()
+                        Button {
+                            model.rotatePairingCode()
+                        } label: {
+                            Text("更换")
+                                .font(.caption.weight(.medium))
+                                .padding(.horizontal, 13)
+                                .padding(.vertical, 9)
+                                .background(Color(.tertiarySystemFill))
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    Spacer()
+                    Text("在电脑端输入配对码即完成连接；令牌保存在系统钥匙串中。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Button {
-                        model.rotatePairingCode()
+                        showRotateTokenConfirm = true
                     } label: {
-                        Text("更换")
+                        Text("重置访问令牌")
                             .font(.caption.weight(.medium))
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 9)
-                            .background(Color(.tertiarySystemFill))
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .foregroundStyle(Theme.rose)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(Color(.separator), lineWidth: 1)
+                            )
                     }
                     .buttonStyle(.plain)
                 }
-                Text("在电脑端输入配对码即完成连接；令牌保存在系统钥匙串中。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button {
-                    showRotateTokenConfirm = true
-                } label: {
-                    Text("重置访问令牌")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(Theme.rose)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color(.separator), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
             }
         }
     }

@@ -30,6 +30,9 @@ class HttpServer(
     }
     private val connections = AtomicLong(0)
 
+    /** Live sockets, closed on stop() so keep-alive clients cannot hold the port. */
+    private val liveSockets = java.util.concurrent.ConcurrentHashMap.newKeySet<SocketChannel>()
+
     val isRunning: Boolean get() = running.get()
     val activeConnections: Long get() = connections.get()
 
@@ -46,6 +49,7 @@ class HttpServer(
                     val socket = ch.accept()
                     socket.configureBlocking(true)
                     connections.incrementAndGet()
+                    liveSockets.add(socket)
                     pool.execute { serve(socket) }
                 } catch (_: Throwable) {
                     if (!running.get()) break
@@ -58,6 +62,11 @@ class HttpServer(
         if (!running.compareAndSet(true, false)) return
         runCatching { serverChannel?.close() }
         serverChannel = null
+        // Force-close idle keep-alive connections; otherwise their threads sleep
+        // in readRequest() and the socket keeps the port busy.
+        val sockets = liveSockets.toList()
+        liveSockets.clear()
+        sockets.forEach { runCatching { it.close() } }
     }
 
     private fun serve(socket: SocketChannel) {
@@ -85,6 +94,7 @@ class HttpServer(
             // client went away
         } finally {
             connections.decrementAndGet()
+            liveSockets.remove(socket)
             runCatching { socket.close() }
         }
     }

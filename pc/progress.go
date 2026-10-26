@@ -5,9 +5,17 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
+)
+
+const (
+	// Minimum gap between event-driven redraws. The ticker uses its own,
+	// slower cadence so large files still show movement.
+	drawInterval = 90 * time.Millisecond
+	tickInterval = 250 * time.Millisecond
 )
 
 // renderer draws a live single-line progress bar for one device, or prefixed
@@ -21,6 +29,11 @@ type renderer struct {
 	lastDraw  time.Time
 	started   time.Time
 	finalised bool
+
+	// mu serialises log lines, bar redraws (including the ticker) and finish.
+	mu         sync.Mutex
+	stats      *Stats
+	tickerStop chan struct{}
 }
 
 func newRenderer(quiet, verbose bool, label string, multi bool) *renderer {
@@ -51,67 +64,129 @@ func (r *renderer) progress() Progress {
 	return func(s *Stats, ev Event, item *MediaItem, err error, dst string) {
 		switch ev {
 		case EventStart:
-			if r.quiet || r.enabled {
+			if r.quiet {
+				return
+			}
+			if r.enabled {
+				r.draw(s)
 				return
 			}
 			if r.multi {
 				// Too noisy for several devices; show progress on completion only.
 				return
 			}
-			fmt.Printf("↓ %s\n", item.Path)
-			return
+			r.line("↓ %s", item.Path)
 
 		case EventDone:
-			if r.quiet || r.enabled {
+			if r.quiet {
 				return
 			}
-			fmt.Printf("%s✓ %s (%s)\n", r.prefix(), item.Path, humanBytes(item.Size))
-			return
+			if r.enabled {
+				r.draw(s)
+				return
+			}
+			r.line("%s✓ %s (%s)", r.prefix(), item.Path, humanBytes(item.Size))
 
 		case EventFailed:
-			r.clearLine()
 			name := ""
 			if item != nil {
 				name = item.Path
 			}
-			fmt.Fprintf(os.Stdout, "\r\033[K%s✗ %s: %v\n", r.prefix(), name, err)
-			return
+			r.line("%s✗ %s: %v", r.prefix(), name, err)
 
 		case EventDiscovered:
 			if r.quiet {
 				return
 			}
+			r.startTicker(s)
 			files := atomic.LoadInt64(&s.TotalFiles)
 			bytes := atomic.LoadInt64(&s.TotalBytes)
-			if r.enabled {
-				r.clearLine()
-			}
 			if r.multi {
-				fmt.Printf("%s→ %d 个待传输文件，共 %s\n", r.prefix(), files, humanBytes(bytes))
+				r.line("%s→ %d 个待传输文件，共 %s", r.prefix(), files, humanBytes(bytes))
 			} else {
-				fmt.Printf("发现 %d 个待传输文件，共 %s\n", files, humanBytes(bytes))
+				r.line("发现 %d 个待传输文件，共 %s", files, humanBytes(bytes))
 			}
-			return
 
 		case EventFinished:
 			r.finish(s)
-			return
-		}
-
-		if r.enabled {
-			r.draw(s)
 		}
 	}
 }
 
-func (r *renderer) clearLine() {
+// line prints a normal log line after clearing any live bar. The mutex keeps it
+// from interleaving with the ticker or other workers.
+func (r *renderer) line(format string, args ...any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lineLocked(format, args...)
+}
+
+func (r *renderer) lineLocked(format string, args ...any) {
 	if r.enabled {
 		fmt.Fprint(os.Stdout, "\r\033[K")
 	}
+	fmt.Fprintf(os.Stdout, format+"\n", args...)
+	// Redraw as soon as the next event arrives instead of waiting for the tick.
+	r.lastDraw = time.Time{}
+}
+
+// startTicker redraws on a fixed cadence while a live bar is active, so GB-sized
+// files do not freeze the speed/ETA display between EventStart and EventDone.
+func (r *renderer) startTicker(s *Stats) {
+	if !r.enabled {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.finalised || r.tickerStop != nil {
+		return
+	}
+	r.stats = s
+	stop := make(chan struct{})
+	r.tickerStop = stop
+	go func() {
+		ticker := time.NewTicker(tickInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				r.tick()
+			case <-stop:
+				return
+			}
+		}
+	}()
+}
+
+func (r *renderer) tick() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stats == nil {
+		return
+	}
+	r.drawLocked(r.stats)
+}
+
+func (r *renderer) stopTickerLocked() {
+	if r.tickerStop == nil {
+		return
+	}
+	close(r.tickerStop)
+	r.tickerStop = nil
+	r.stats = nil
 }
 
 func (r *renderer) draw(s *Stats) {
-	if time.Since(r.lastDraw) < 90*time.Millisecond {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.drawLocked(s)
+}
+
+func (r *renderer) drawLocked(s *Stats) {
+	if !r.enabled || r.finalised {
+		return
+	}
+	if time.Since(r.lastDraw) < drawInterval {
 		return
 	}
 	r.lastDraw = time.Now()
@@ -155,13 +230,13 @@ func (r *renderer) draw(s *Stats) {
 }
 
 func (r *renderer) finish(s *Stats) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.finalised {
 		return
 	}
 	r.finalised = true
-	if r.enabled {
-		r.clearLine()
-	}
+	r.stopTickerLocked()
 	if r.quiet {
 		return
 	}
@@ -178,14 +253,14 @@ func (r *renderer) finish(s *Stats) {
 		icon = "!"
 	}
 	if r.multi {
-		fmt.Printf("%s%s 完成：%d 个文件 (%s)，跳过 %d，失败 %d，用时 %s\n",
+		r.lineLocked("%s%s 完成：%d 个文件 (%s)，跳过 %d，失败 %d，用时 %s",
 			r.prefix(), icon, done-failed, humanBytes(bytes), skipped, failed, elapsed)
 	} else {
-		fmt.Printf("%s 完成：传输 %d 个文件 (%s)，跳过 %d 个，失败 %d 个，用时 %s，平均 %s/s\n",
+		r.lineLocked("%s 完成：传输 %d 个文件 (%s)，跳过 %d 个，失败 %d 个，用时 %s，平均 %s/s",
 			icon, done-failed, humanBytes(bytes), skipped, failed, elapsed, humanBytes(int64(speed)))
 	}
 	if failed > 0 {
-		fmt.Printf("  有 %d 个文件失败，重新运行同样的命令会自动续传。\n", failed)
+		r.lineLocked("  有 %d 个文件失败，重新运行同样的命令会自动续传。", failed)
 	}
 }
 

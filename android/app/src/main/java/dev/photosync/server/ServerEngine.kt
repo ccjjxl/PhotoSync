@@ -110,7 +110,7 @@ class ServerEngine(
         current?.stop()
         current = null
         discovery.stop()
-        _status.value = _status.value.copy(running = false, connected = 0)
+        _status.value = Status(running = false, port = settings.snapshot().port)
     }
 
     fun refresh() {

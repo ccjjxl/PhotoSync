@@ -119,11 +119,18 @@ final class AppModel: ObservableObject {
 
     func stopServer() {
         engine.stop()
+        lastError = nil          // a stale bind error must not survive a stop
         pullState()
     }
 
     func toggleServer() {
-        running ? stopServer() : startServer()
+        // Trust the engine, not the published value: it may lag behind by one
+        // runloop tick right after start/stop.
+        if ServerEngine.shared.running || running {
+            stopServer()
+        } else {
+            startServer()
+        }
     }
 
     func setPort(_ newPort: Int) {

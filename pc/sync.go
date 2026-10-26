@@ -252,14 +252,31 @@ func (s *Syncer) Run(ctx context.Context) error {
 	var jobs []job
 	var skipped int64
 
+	// Phones can hold several photos with the same album + filename (bursts,
+	// re-imports, iOS duplicates). Resolving paths one item at a time made them
+	// collide on the same destination, so one overwrote the other and the
+	// manifest ended up with two entries for one file — every run then retried
+	// the same batch. Assign unique paths up front instead.
+	used := s.reserveExistingNames()
+	uniquified := 0
+
 	for _, it := range items {
 		if !s.opts.IncludeVideos && it.Video {
 			skipped++
 			continue
 		}
 		dst := s.localPath(it)
+		if other, clash := used[strings.ToLower(toSlash(dst))]; clash && other != string(it.ID) {
+			dst = uniquePath(dst, string(it.ID), used)
+			uniquified++
+			if s.opts.Verbose {
+				fmt.Printf("! %s 与已有文件同名，改存为 %s\n",
+					it.Path, filepath.Base(dst))
+			}
+		}
+		used[strings.ToLower(toSlash(dst))] = string(it.ID)
 
-		existing, tracked := s.man.Get(it.Path)
+		existing, tracked := s.man.Get(manifestKey(it))
 		// Full mode re-downloads everything; repair ignores the manifest and
 		// trusts only what is actually on disk.
 		force := s.opts.Overwrite || s.opts.Mode == ModeFull
@@ -276,7 +293,7 @@ func (s *Syncer) Run(ctx context.Context) error {
 			// Case B: file exists on disk (e.g. copied by another tool or manifest lost).
 			if info, err := os.Stat(dst); err == nil && info.Size() == it.Size {
 				rel, _ := filepath.Rel(s.opts.OutDir, dst)
-				s.man.Put(it.Path, Entry{ID: it.ID, Size: it.Size, Mtime: it.Mtime, Local: rel})
+				s.man.Put(manifestKey(it), Entry{ID: it.ID, Size: it.Size, Mtime: it.Mtime, Local: rel})
 				skipped++
 				if s.opts.Verbose {
 					fmt.Printf("= 跳过 %s（本地已存在）\n", it.Path)
@@ -367,6 +384,80 @@ feed:
 	return ctx.Err()
 }
 
+// manifestKey identifies an item in the manifest. The remote path alone is not
+// unique — phones can hold several photos with the same album + filename — so the
+// media id is appended. Existing manifests keyed by path alone still resolve via
+// Manifest.Get's fallback.
+func manifestKey(it MediaItem) string {
+	id := string(it.ID)
+	if id == "" {
+		return it.Path
+	}
+	return it.Path + "#" + id
+}
+
+// reserveExistingNames records files already on disk so a new item can avoid
+// overwriting them. Keyed by lower-cased slash path for case-insensitive
+// filesystems (macOS/Windows).
+func (s *Syncer) reserveExistingNames() map[string]string {
+	used := make(map[string]string)
+	if s.opts.Mode == ModeFull || s.opts.Overwrite {
+		return used // everything will be rewritten anyway
+	}
+	_ = filepath.WalkDir(s.opts.OutDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".photosync") {
+			return nil
+		}
+		used[strings.ToLower(toSlash(path))] = ""
+		return nil
+	})
+	return used
+}
+
+// uniquePath appends "-<id>" (and "-2", "-3"… if needed) before the extension
+// until the name is free. The id keeps repeated runs stable: the same photo
+// always maps to the same fallback name.
+func uniquePath(dst, id string, used map[string]string) string {
+	dir := filepath.Dir(dst)
+	base := filepath.Base(dst)
+	ext := filepath.Ext(base)
+	stem := strings.TrimSuffix(base, ext)
+	suffix := sanitizeName(id)
+	if suffix == "" {
+		suffix = "dup"
+	}
+	if len(suffix) > 12 {
+		suffix = suffix[:12]
+	}
+
+	// A candidate is free when neither the filesystem nor the reservation map
+	// claims it — the latter matters for two same-named items in one batch.
+	free := func(p string) bool {
+		if _, taken := used[strings.ToLower(toSlash(p))]; taken {
+			return false
+		}
+		_, err := os.Stat(p)
+		return os.IsNotExist(err)
+	}
+
+	candidate := filepath.Join(dir, stem+"-"+suffix+ext)
+	for i := 2; i <= 1000; i++ {
+		if free(candidate) {
+			return candidate
+		}
+		candidate = filepath.Join(dir, fmt.Sprintf("%s-%s-%d%s", stem, suffix, i, ext))
+	}
+	return candidate
+}
+
+// toSlash normalises separators for map keys and comparisons.
+func toSlash(p string) string {
+	return strings.ReplaceAll(p, "\\", "/")
+}
+
 // localPath builds the destination path, honouring folder structure and flat mode.
 func (s *Syncer) localPath(it MediaItem) string {
 	if s.opts.Flat {
@@ -422,7 +513,7 @@ func (s *Syncer) transfer(ctx context.Context, it MediaItem, dst string) error {
 				_ = os.Chtimes(dst, mt, mt)
 			}
 			rel, _ := filepath.Rel(s.opts.OutDir, dst)
-			s.man.Put(it.Path, Entry{ID: it.ID, Size: it.Size, Mtime: it.Mtime, Local: rel})
+			s.man.Put(manifestKey(it), Entry{ID: it.ID, Size: it.Size, Mtime: it.Mtime, Local: rel})
 			return nil
 		}
 		lastErr = err

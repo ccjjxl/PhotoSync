@@ -4,24 +4,43 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:scaleX="0.62" android:scaleY="0.62" android:pivotX="54" android:pivotY="54">
-        <path
-            android:strokeColor="#FFFFFF"
-            android:strokeWidth="6"
-            android:strokeLineCap="round"
-            android:fillColor="#00000000"
-            android:pathData="M78,54 A24,24 0 1,1 62,31.3" />
+
+    <!-- Circulating arrows -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M35.66,49.09 A18.98,18.98 0 0,1 71.21,45.98" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M72.34,58.91 A18.98,18.98 0 0,1 36.79,62.02" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M74.06,52.09 L75.41,43.27 L66.43,47.46 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M33.94,55.91 L32.59,64.73 L41.57,60.54 Z" />
+
+    <!-- Photo frame -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.97"
+        android:fillColor="#00000000"
+        android:pathData="M46.90,45.14 L61.10,45.14 A2.11,2.11 0 0 1 63.21,47.25 L63.21,60.75 A2.11,2.11 0 0 1 61.10,62.86 L46.90,62.86 A2.11,2.11 0 0 1 44.79,60.75 L44.79,47.25 A2.11,2.11 0 0 1 46.90,45.14 Z" />
+
+    <!-- Photo content: transparent sky so the adaptive background shows through -->
+    <group>
+        <clip-path
+            android:pathData="M47.04,46.12 L60.95,46.12 A1.27,1.27 0 0 1 62.22,47.39 L62.22,60.60 A1.27,1.27 0 0 1 60.95,61.87 L47.04,61.87 A1.27,1.27 0 0 1 45.77,60.60 L45.77,47.39 A1.27,1.27 0 0 1 47.04,46.12 Z" />
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M70,22 L84,36 L66,42 Z" />
+            android:pathData="M57.62,48.87 A1.97,1.97 0 1 1 57.62,52.81 A1.97,1.97 0 1 1 57.62,48.87 Z" />
         <path
-            android:strokeColor="#99FFFFFF"
-            android:strokeWidth="6"
-            android:strokeLineCap="round"
-            android:fillColor="#00000000"
-            android:pathData="M30,54 A24,24 0 1,1 46,76.7" />
-        <path
-            android:fillColor="#99FFFFFF"
-            android:pathData="M38,86 L24,72 L42,66 Z" />
+            android:fillColor="#FFFFFF"
+            android:pathData="M45.77,61.88 L45.77,58.64 L50.20,54.21 L54.56,58.08 L57.73,54.00 L62.23,58.36 L62.23,61.88 Z" />
     </group>
 </vector>

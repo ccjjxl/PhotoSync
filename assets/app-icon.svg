@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    PhotoSync app icon — single source for Android / iOS.
+    Full-bleed 1024x1024: iOS applies its own rounded mask, Android legacy
+    mipmaps get rounded corners in assets/gen_icons.py.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5CB4EC"/>
+      <stop offset="0.52" stop-color="#3D8BE6"/>
+      <stop offset="1" stop-color="#2F6BD8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.28" cy="0.20" r="0.75">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="photo-inner">
+      <rect x="395" y="400" width="234" height="224" rx="18"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#glow)"/>
+
+  <!-- Circulating arrows -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="64" stroke-linecap="round">
+    <path d="M251.20,442.12 A270,270 0 0,1 756.70,397.89"/>
+    <path d="M772.80,581.88 A270,270 0 0,1 267.30,626.11"/>
+  </g>
+  <g fill="#FFFFFF">
+    <path d="M797.27,484.90 L816.45,359.44 L688.84,418.94 Z"/>
+    <path d="M226.73,539.10 L207.55,664.56 L335.16,605.06 Z"/>
+  </g>
+
+  <!-- Photo inside the cycle -->
+  <rect x="381" y="386" width="262" height="252" rx="30"
+        fill="none" stroke="#FFFFFF" stroke-width="28"/>
+  <g clip-path="url(#photo-inner)">
+    <circle cx="563.5" cy="467" r="28" fill="#FFFFFF"/>
+    <path d="M395,624 L395,578 L458,515 L520,570 L565,512 L629,574 L629,624 Z" fill="#FFFFFF"/>
+  </g>
+</svg>

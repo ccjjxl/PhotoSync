@@ -88,6 +88,25 @@ final class HttpServer: @unchecked Sendable {
     /// Called on the main queue when start/stop succeeds or fails.
     var onStateChange: ((Bool, String?) -> Void)?
 
+    /// Live connections, so stop() can close them instead of leaving keep-alive
+    /// sockets holding the port.
+    private var connections: [NWConnection] = []
+    private let connectionLock = NSLock()
+
+    /// Identifies the current listener generation. stop() cancels the listener and
+    /// bumps this, so late `.cancelled` callbacks from an old listener cannot
+    /// overwrite the state of a freshly started one.
+    private var generation: UInt64 = 0
+
+    /// How many times a still-busy port may be retried before reporting failure.
+    private var retriesLeft = 5
+
+    /// `NWListener` surfaces EADDRINUSE through NSPOSIXErrorDomain.
+    private static func looksLikeAddressInUse(_ error: NWError) -> Bool {
+        if case .posix(let code) = error, code == .EADDRINUSE { return true }
+        return false
+    }
+
     init(port: UInt16, handler: @escaping Handler) {
         self.port = port
         self.handler = handler
@@ -97,6 +116,9 @@ final class HttpServer: @unchecked Sendable {
 
     func start() {
         guard !isRunning else { return }
+        generation &+= 1
+        let currentGeneration = generation
+
         do {
             let parameters = NWParameters.tcp
             parameters.allowLocalEndpointReuse = true
@@ -112,16 +134,31 @@ final class HttpServer: @unchecked Sendable {
             }
             listener.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
+                // Ignore events from a listener that has already been replaced:
+                // its .cancelled arrives after the new listener may be .ready.
+                guard self.generation == currentGeneration else { return }
                 switch state {
                 case .ready:
+                    self.retriesLeft = 5
                     self.isRunning = true
                     self.notifyMain(true, nil)
                 case .failed(let error):
                     self.isRunning = false
+                    // A port that is still being released by the previous
+                    // listener looks like "address in use" for a few hundred
+                    // milliseconds. Retry instead of failing permanently.
+                    if self.retriesLeft > 0, Self.looksLikeAddressInUse(error) {
+                        self.retriesLeft -= 1
+                        self.listener?.cancel()
+                        self.listener = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                            self?.start()
+                        }
+                        return
+                    }
                     self.notifyMain(false, "端口 \(self.port) 启动失败：\(error.localizedDescription)")
                 case .cancelled:
                     self.isRunning = false
-                    self.notifyMain(false, nil)
                 default:
                     break
                 }
@@ -135,8 +172,19 @@ final class HttpServer: @unchecked Sendable {
     }
 
     func stop() {
+        retriesLeft = 5           // a user-initiated stop starts a fresh budget
+        generation &+= 1          // invalidate pending callbacks from this listener
         listener?.cancel()
         listener = nil
+
+        connectionLock.lock()
+        let live = connections
+        connections.removeAll()
+        connectionLock.unlock()
+        for connection in live {
+            connection.cancel()
+        }
+
         isRunning = false
     }
 
@@ -149,8 +197,18 @@ final class HttpServer: @unchecked Sendable {
     // MARK: - Connection
 
     private func accept(_ connection: NWConnection) {
+        connectionLock.lock()
+        connections.append(connection)
+        connectionLock.unlock()
+
         connection.start(queue: queue)
         receive(on: connection, buffer: Data())
+    }
+
+    private func forget(_ connection: NWConnection) {
+        connectionLock.lock()
+        connections.removeAll { $0 === connection }
+        connectionLock.unlock()
     }
 
     private func receive(on connection: NWConnection, buffer: Data) {
@@ -158,6 +216,7 @@ final class HttpServer: @unchecked Sendable {
             [weak self] chunk, _, isComplete, error in
             guard let self else { return }
             if error != nil {
+                self.forget(connection)
                 connection.cancel()
                 return
             }
@@ -167,6 +226,7 @@ final class HttpServer: @unchecked Sendable {
 
             guard let headerEnd = accumulated.range(of: Data("\r\n\r\n".utf8)) else {
                 if isComplete || accumulated.count > 128 * 1024 {
+                    self.forget(connection)
                     connection.cancel()
                     return
                 }
@@ -188,6 +248,7 @@ final class HttpServer: @unchecked Sendable {
                 if keepAlive {
                     self.receive(on: connection, buffer: Data())
                 } else {
+                    self.forget(connection)
                     connection.cancel()
                 }
             }
