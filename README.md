@@ -395,7 +395,7 @@ cd pc && go build -o sync-client . && go vet ./...
 
 ## 自动发布（GitHub Actions）
 
-推送一个 tag 即自动构建 **全部平台** 并创建 GitHub Release：
+推送一个 tag 即自动构建 **全部平台** 并创建 GitHub Release（已在 v1.2.0 实测通过）：
 
 ```bash
 ./release.sh 1.3.0 --push      # 或 major / minor / patch
@@ -431,23 +431,32 @@ publish            汇总所有 artifact → 创建 Release（说明取自 CHANG
 
 ### 配置 Android 签名 Secrets
 
-Release 要产出**正式签名**的 APK，需要在仓库
-`Settings → Secrets and variables → Actions` 添加 4 个 secret：
+Release 要产出**正式签名**的 APK，需要 4 个 repository secret。
+一条命令即可（需要 `gh auth login`）：
+
+```bash
+cd android
+./scripts/gen-keystore.sh          # 首次：生成密钥（已有可跳过）
+./scripts/setup-ci-secrets.sh      # 上传到 GitHub Actions Secrets
+gh secret list                     # 验证
+```
+
+手动配置等价于：仓库 `Settings → Secrets and variables → Actions` 添加
 
 | Secret | 内容 |
 | --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 android/keystore/photosync-release.jks` 的输出 |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 android/keystore/photosync-release.jks` |
 | `ANDROID_STORE_PASSWORD` | keystore 密码 |
 | `ANDROID_KEY_ALIAS` | 别名（默认 `photosync`） |
 | `ANDROID_KEY_PASSWORD` | key 密码 |
 
-生成 base64：
-```bash
-base64 -w0 android/keystore/photosync-release.jks > keystore.b64
-```
-
 未配置时工作流**不会失败**，只会打一条 warning 并用 debug 签名产出 APK
-（能装能跑，但无法覆盖升级正式版）。
+（能装能跑，但无法覆盖升级正式版）。判断办法：
+
+```bash
+# 正式签名会显示 CN=PhotoSync Release；debug 显示 CN=Android Debug
+apksigner verify --print-certs PhotoSync-android-v1.2.0.apk | grep "Signer #1"
+```
 
 ### 手动触发
 
