@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+VERSION="${VERSION:-$(cat ../VERSION 2>/dev/null | tr -d '[:space:]')}"
 VERSION="${VERSION:-1.0.0}"
 OUT="${OUT:-dist}"
 mkdir -p "$OUT"

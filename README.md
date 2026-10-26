@@ -393,6 +393,78 @@ cd pc && go build -o sync-client . && go vet ./...
 
 ---
 
+## 自动发布（GitHub Actions）
+
+推送一个 tag 即自动构建 **全部平台** 并创建 GitHub Release：
+
+```bash
+./release.sh 1.3.0 --push      # 或 major / minor / patch
+```
+
+脚本会：校验工作区干净 → 检查 CHANGELOG 有对应版本段落 →
+更新 `VERSION` 与 Go 版本回退值 → 提交 → 打 tag → 推送，随后触发
+`.github/workflows/release.yml`。
+
+### 发布产物
+
+| 文件 | 说明 |
+| --- | --- |
+| `PhotoSync-android-v1.3.0.apk` | 安卓 APK（正式签名） |
+| `sync-client-linux-amd64-v1.3.0.tar.gz` | Linux x86_64 |
+| `sync-client-linux-arm64-v1.3.0.tar.gz` | Linux ARM64 |
+| `sync-client-windows-amd64-v1.3.0.zip` | Windows x86_64 |
+| `sync-client-windows-arm64-v1.3.0.zip` | Windows ARM64 |
+| `sync-client-darwin-amd64-v1.3.0.tar.gz` | macOS Intel |
+| `sync-client-darwin-arm64-v1.3.0.tar.gz` | macOS Apple Silicon |
+| `PhotoSync-ios-simulator-v1.3.0.zip` | iOS 模拟器包（真机需自行签名） |
+| `SHA256SUMS.txt` | 全部产物的校验和 |
+
+### 三个并行任务
+
+```
+desktop (ubuntu)   go vet → 交叉编译 6 平台 → tar.gz/zip → SHA256SUMS
+android (ubuntu)   setup-java + android-36 → 恢复 keystore → assembleRelease → 验签
+ios     (macos-14) xcodegen → xcodebuild -sdk iphonesimulator → 打包 .app
+                                   ↓
+publish            汇总所有 artifact → 创建 Release（说明取自 CHANGELOG.md）
+```
+
+### 配置 Android 签名 Secrets
+
+Release 要产出**正式签名**的 APK，需要在仓库
+`Settings → Secrets and variables → Actions` 添加 4 个 secret：
+
+| Secret | 内容 |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 android/keystore/photosync-release.jks` 的输出 |
+| `ANDROID_STORE_PASSWORD` | keystore 密码 |
+| `ANDROID_KEY_ALIAS` | 别名（默认 `photosync`） |
+| `ANDROID_KEY_PASSWORD` | key 密码 |
+
+生成 base64：
+```bash
+base64 -w0 android/keystore/photosync-release.jks > keystore.b64
+```
+
+未配置时工作流**不会失败**，只会打一条 warning 并用 debug 签名产出 APK
+（能装能跑，但无法覆盖升级正式版）。
+
+### 手动触发
+
+在 Actions 页面选 `Release` → *Run workflow*：
+- `draft: true`（默认）→ 只构建并上传 artifact，不创建 Release
+- `draft: false` → 构建并创建 Release
+
+### 版本号从哪来
+
+单一来源：仓库根的 `VERSION` 文件。
+
+* Android 的 `versionCode` 由 semver 自动推导（`1.2.0` → `10200`），无需手改
+* Go 二进制通过 `-ldflags -X main.version=…` 注入
+* iOS 通过 `MARKETING_VERSION` 传入
+
+所以发版只需改 `VERSION` + 写 CHANGELOG，`release.sh` 会处理好其余部分。
+
 ## 安卓签名打包
 
 发布版必须用**固定密钥**签名，否则无法覆盖安装升级（用户需先卸载，本地数据与配对令牌全部丢失）。

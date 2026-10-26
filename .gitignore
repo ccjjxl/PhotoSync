@@ -30,6 +30,7 @@ xcuserdata/
 
 # Go
 pc/dist/
+pc/release/
 pc/sync-client
 pc/sync-client.exe
 

@@ -23,13 +23,31 @@ val keystoreProps = Properties().apply {
 val hasReleaseKeystore = keystorePropsFile.exists() &&
     keystoreProps.getProperty("storeFile")?.let { rootProject.file(it).exists() } == true
 
-// Version can be overridden from the command line: -PversionName=1.2.0 -PversionCode=3
+// Version resolution order:
+//   1. -PversionName / -PversionCode   (explicit override, used by release CI)
+//   2. keystore.properties
+//   3. the repo's VERSION file        (single source of truth)
+//   4. hard-coded fallback
+val repoVersionFile = rootProject.file("../VERSION")
+val repoVersion = if (repoVersionFile.exists()) repoVersionFile.readText().trim() else ""
 val appVersionName = (findProperty("versionName") as String?)
-    ?: keystoreProps.getProperty("versionName")
-    ?: "1.0.0"
-val appVersionCode = ((findProperty("versionCode") as String?)
-    ?: keystoreProps.getProperty("versionCode")
-    ?: "1").toInt()
+    ?: repoVersion.ifEmpty { keystoreProps.getProperty("versionName") ?: "1.0.0" }
+// Android requires a monotonically increasing integer; derive a stable one from
+// the semver so every release gets a distinct, ordered code without hand-editing.
+val appVersionCode = (
+    (findProperty("versionCode") as String?)
+        ?: if (repoVersion.isNotEmpty()) deriveVersionCode(appVersionName)
+        else keystoreProps.getProperty("versionCode")
+        ?: deriveVersionCode(appVersionName)
+    ).toInt()
+
+fun deriveVersionCode(name: String): String {
+    val parts = name.split(".").mapNotNull { it.toIntOrNull() }
+    val major = parts.getOrNull(0) ?: 1
+    val minor = parts.getOrNull(1) ?: 0
+    val patch = parts.getOrNull(2) ?: 0
+    return (major * 10000 + minor * 100 + patch).toString()
+}
 
 android {
     namespace = "dev.photosync"
