@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -139,12 +140,17 @@ type Client struct {
 	device DeviceInfo
 }
 
+// dialTimeout is how long we wait for a TCP handshake. Kept short so an
+// unreachable phone (stale IP, different Wi-Fi) fails fast instead of stalling
+// discovery for 10s per device.
+const dialTimeout = 2500 * time.Millisecond
+
 // NewClient builds an API client with a transfer-tuned HTTP transport.
 func NewClient(base, token string) *Client {
 	tr := &http.Transport{
 		Proxy: nil,
 		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
+			Timeout:   dialTimeout,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
 		ForceAttemptHTTP2:     false,
@@ -357,8 +363,19 @@ func listenBroadcast() (net.PacketConn, error) {
 	return lc.ListenPacket(context.Background(), "udp4", ":0")
 }
 
-// Discover broadcasts a probe and collects every phone that answers.
-func Discover(timeout time.Duration) ([]Offer, error) {
+// Discover finds phones on the local network.
+//
+// It sends a UDP probe three ways, because real networks block broadcast in
+// surprising ways (AP isolation, guest Wi-Fi, routers that drop 255.255.255.255,
+// adb tunnels, VPNs):
+//
+//  1. subnet-directed broadcast (e.g. 192.168.5.255) — fastest, usual case
+//  2. limited broadcast 255.255.255.255               — some routers only honour this
+//  3. unicast sweep of every host in the /24           — works when broadcast is dead
+//
+// The sweep only starts if broadcasts produced no answer, so a healthy network
+// still responds in ~100ms.
+func DiscoverParallel(timeout time.Duration) ([]Offer, error) {
 	conn, err := listenBroadcast()
 	if err != nil {
 		return nil, err
@@ -367,57 +384,227 @@ func Discover(timeout time.Duration) ([]Offer, error) {
 
 	probe := []byte(discoveryMagic + " DISCOVER")
 
-	// Send to the subnet broadcast address of each local interface and the global one.
-	dests := broadcastTargets()
-	var sendErr error
-	for _, d := range dests {
-		addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", d, discoveryPort))
-		if err != nil {
-			continue
-		}
-		if _, err := conn.WriteTo(probe, addr); err != nil {
-			sendErr = err
+	seen := map[string]bool{}
+	var offers []Offer
+	buf := make([]byte, 2048)
+
+	// drain collects replies until the deadline; it returns how many arrived.
+	drain := func(until time.Time) int {
+		got := 0
+		for {
+			_ = conn.SetReadDeadline(until)
+			n, src, err := conn.ReadFrom(buf)
+			if err != nil {
+				return got
+			}
+			var offer Offer
+			if err := json.Unmarshal(buf[:n], &offer); err != nil {
+				continue
+			}
+			if offer.Type != "OFFER" {
+				continue
+			}
+			key := fmt.Sprintf("%s|%s", offer.DeviceID+offer.Device, src.String())
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			offers = append(offers, offer)
+			got++
 		}
 	}
-	for i := 0; i < 2; i++ {
-		// A second probe helps when the first packet is dropped by a busy AP.
-		time.Sleep(120 * time.Millisecond)
-		for _, d := range dests {
-			if addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", d, discoveryPort)); err == nil {
+
+	sendTo := func(targets []string) {
+		for _, t := range targets {
+			if addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", t, discoveryPort)); err == nil {
 				_, _ = conn.WriteTo(probe, addr)
 			}
 		}
 	}
-	_ = sendErr
 
-	seen := map[string]bool{}
-	var offers []Offer
-	deadline := time.Now().Add(timeout)
-	buf := make([]byte, 2048)
-	for {
-		_ = conn.SetReadDeadline(deadline)
-		n, src, err := conn.ReadFrom(buf)
-		if err != nil {
-			break
-		}
-		var offer Offer
-		if err := json.Unmarshal(buf[:n], &offer); err != nil {
-			continue
-		}
-		if offer.Type != "OFFER" {
-			continue
-		}
-		key := fmt.Sprintf("%s|%s", offer.Device, src.String())
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		offers = append(offers, offer)
+	// --- phase 1: broadcast (two rounds; a busy AP may drop the first packet)
+	bcast := broadcastTargets()
+	sendTo(bcast)
+	time.Sleep(120 * time.Millisecond)
+	sendTo(bcast)
 
-		// Answer immediately and keep the socket open for stragglers.
-		deadline = time.Now().Add(300 * time.Millisecond)
+	// Broadcast replies arrive within ~1 RTT (<150ms). Don't burn the whole
+	// budget waiting: if nothing came back we want to start the sweep early.
+	bcastWait := timeout / 3
+	if bcastWait > 450*time.Millisecond {
+		bcastWait = 450 * time.Millisecond
+	}
+	if bcastWait < 200*time.Millisecond {
+		bcastWait = 200 * time.Millisecond
+	}
+	drain(time.Now().Add(bcastWait))
+
+	// Phase 2 (unicast sweep) runs in parallel from the caller, see resolveOffers.
+
+	return offers, nil
+}
+
+// Discover is the simple synchronous entry point used by `discover`/`serve`:
+// broadcast first, then a unicast sweep if broadcast found nothing reachable.
+func Discover(timeout time.Duration) ([]Offer, error) {
+	offers, err := DiscoverParallel(timeout)
+	if err != nil && len(offers) == 0 {
+		return nil, err
+	}
+	if len(offers) == 0 {
+		offers = sweepLANOffers(timeout)
 	}
 	return offers, nil
+}
+
+// sweepLANOffers wraps sweep() returning only the offers.
+func sweepLANOffers(timeout time.Duration) []Offer {
+	var found []Offer
+	var mu sync.Mutex
+	window := timeout / 2
+	if window < 350*time.Millisecond {
+		window = 350 * time.Millisecond
+	}
+	if window > 700*time.Millisecond {
+		window = 700 * time.Millisecond
+	}
+	sweep([]byte(discoveryMagic+" DISCOVER"), subnetHosts(), window, func(o *Offer) {
+		mu.Lock()
+		found = append(found, *o)
+		mu.Unlock()
+	})
+	return found
+}
+
+// sweep fires the probe at every host on the LAN.
+//
+// Sequential sendto on one socket serialises on ARP resolution for each
+// unresolved neighbour (seconds across a /24). Giving each host its own
+// short-lived socket lets the kernel resolve them all in parallel (~10ms for
+// 253 hosts).
+//
+// Design notes:
+//   - a global done channel closes as soon as one phone answers, so silent
+//     hosts do not hold up the whole sweep
+//   - the reply window is short (default 600ms); unanswered hosts abort early
+func sweep(probe []byte, hosts []string, replyWindow time.Duration, onReply func(*Offer)) {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	done := make(chan struct{})
+	var once sync.Once
+	stop := func() { once.Do(func() { close(done) }) }
+
+	sem := make(chan struct{}, 128)
+	for _, h := range hosts {
+		wg.Add(1)
+		go func(h string) {
+			defer wg.Done()
+			select {
+			case <-done:
+				return
+			default:
+			}
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			addr := net.JoinHostPort(h, strconv.Itoa(discoveryPort))
+			c, err := net.DialTimeout("udp4", addr, 200*time.Millisecond)
+			if err != nil {
+				return
+			}
+			defer c.Close()
+			_ = c.SetDeadline(time.Now().Add(replyWindow))
+			if _, err := c.Write(probe); err != nil {
+				return
+			}
+
+			buf := make([]byte, 2048)
+			for {
+				n, err := c.Read(buf)
+				if err != nil {
+					return
+				}
+				var offer Offer
+				if err := json.Unmarshal(buf[:n], &offer); err != nil || offer.Type != "OFFER" {
+					continue
+				}
+				mu.Lock()
+				onReply(&offer)
+				mu.Unlock()
+				stop()
+				return
+			}
+		}(h)
+	}
+
+	waited := make(chan struct{})
+	go func() { wg.Wait(); close(waited) }()
+
+	select {
+	case <-waited:
+	case <-done:
+		// One phone answered; give the rest a brief moment then move on.
+		select {
+		case <-waited:
+		case <-time.After(150 * time.Millisecond):
+		}
+	}
+}
+
+// subnetHosts enumerates every usable host address on each local /24 (and
+// smaller) IPv4 network, skipping our own address and network/broadcast.
+func subnetHosts() []string {
+	var out []string
+	seen := map[string]bool{}
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return out
+	}
+	for _, ifi := range ifaces {
+		if ifi.Flags&net.FlagUp == 0 || ifi.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := ifi.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			ipnet, ok := a.(*net.IPNet)
+			if !ok || ipnet.IP.To4() == nil {
+				continue
+			}
+			ip := ipnet.IP.To4()
+			ones, bits := ipnet.Mask.Size()
+			if bits != 32 {
+				continue
+			}
+			// Only sweep networks small enough to be a LAN.
+			if ones < 22 {
+				continue
+			}
+			network := ip.Mask(ipnet.Mask)
+			count := 1 << uint(32-ones)
+			if count > 1024 {
+				continue
+			}
+			for i := 1; i < count-1; i++ {
+				cand := make(net.IP, 4)
+				copy(cand, network)
+				cand[0] |= byte(i >> 24)
+				cand[1] |= byte(i >> 16)
+				cand[2] |= byte(i >> 8)
+				cand[3] |= byte(i)
+				s := cand.String()
+				if s == ip.String() || seen[s] {
+					continue
+				}
+				seen[s] = true
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 func broadcastTargets() []string {

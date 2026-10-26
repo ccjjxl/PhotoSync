@@ -146,14 +146,30 @@ func resolveOffers(ctx context.Context, cfg *Config, sel Selector, interactive b
 		return []Offer{*o}, nil
 	}
 
-	// 2. network discovery
+	// 2. discovery: broadcast and unicast sweep run concurrently, because many
+	//    routers silently drop broadcast. Merging both keeps discovery at ~1-2s
+	//    whether or not broadcast works.
 	if !sel.Quiet {
 		fmt.Println("正在局域网内搜索手机…")
 	}
-	offers, err := Discover(1800 * time.Millisecond)
-	if err != nil {
-		return nil, err
+	type discResult struct {
+		offers []Offer
+		err    error
 	}
+	bcastCh := make(chan discResult, 1)
+	sweepCh := make(chan []Offer, 1)
+	go func() {
+		o, err := DiscoverParallel(1500 * time.Millisecond)
+		bcastCh <- discResult{offers: o, err: err}
+	}()
+	go func() { sweepCh <- sweepLAN() }()
+
+	br := <-bcastCh
+	scanned := <-sweepCh
+	if br.err != nil && len(br.offers) == 0 && len(scanned) == 0 {
+		return nil, br.err
+	}
+	offers := mergeOffers(br.offers, scanned)
 
 	// A known device's stored endpoint is often better than a freshly
 	// discovered one (NAT, VPN, port-forwarding, adb tunnel). Always probe the
@@ -191,23 +207,9 @@ func resolveOffers(ctx context.Context, cfg *Config, sel Selector, interactive b
 		}
 	}
 
-	// Drop discovery entries we cannot actually reach, so one offline phone
-	// does not abort the whole run.
-	reachable := make([]Offer, 0, len(offers))
-	for _, o := range offers {
-		if o.BaseURL() == "" {
-			continue
-		}
-		if _, err := GuessFromHost(ctx, o.BestIP(), o.Port); err != nil {
-			// Keep known devices reachable via their stored endpoint (handled above).
-			if cfg.FindDevice(o.DeviceID) == nil {
-				fmt.Fprintf(os.Stderr, "  ⚠ 跳过不可达设备 %s (%s)\n", o.Device, o.BaseURL())
-			}
-			continue
-		}
-		reachable = append(reachable, o)
-	}
-	offers = reachable
+	// Verify reachability. A broadcast reply can advertise an address we cannot
+	// reach (NAT, VPN, wrong interface), so everything gets a quick HTTP probe.
+	offers = filterReachable(ctx, cfg, offers, !sel.Quiet)
 
 	if len(offers) == 0 {
 		return nil, errors.New("未发现设备。请确认：\n  1) 手机与电脑在同一 Wi-Fi\n  2) 手机 App 中「同步服务」已开启\n  3) 路由器未开启 AP 隔离\n也可用 --host <手机IP> 手动指定")
@@ -218,6 +220,85 @@ func resolveOffers(ctx context.Context, cfg *Config, sel Selector, interactive b
 		return offers[i].Device < offers[j].Device
 	})
 	return offers, nil
+}
+
+// filterReachable keeps only offers that answer a quick HTTP ping.
+// Probes run in parallel so several phones cost one round-trip, not N.
+func filterReachable(ctx context.Context, cfg *Config, offers []Offer, warn bool) []Offer {
+	type verdict struct {
+		idx int
+		ok  bool
+	}
+	results := make([]verdict, len(offers))
+	var wg sync.WaitGroup
+	for i, o := range offers {
+		if o.BaseURL() == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, o Offer) {
+			defer wg.Done()
+			probeCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+			defer cancel()
+			_, err := GuessFromHost(probeCtx, o.BestIP(), o.Port)
+			results[i] = verdict{idx: i, ok: err == nil}
+		}(i, o)
+	}
+	wg.Wait()
+
+	out := make([]Offer, 0, len(offers))
+	seen := map[string]bool{}
+	for _, r := range results {
+		if !r.ok {
+			o := offers[r.idx]
+			if warn && cfg.FindDevice(o.DeviceID) == nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ 跳过不可达设备 %s (%s)\n", o.Device, o.BaseURL())
+			}
+			continue
+		}
+		o := offers[r.idx]
+		base := o.BaseURL()
+		if base == "" || seen[base] {
+			continue
+		}
+		seen[base] = true
+		out = append(out, o)
+	}
+	return out
+}
+
+// mergeOffers deduplicates offers by device id, preferring the sweep result
+// (which is inherently reachable) over a broadcast reply.
+func mergeOffers(broadcast, swept []Offer) []Offer {
+	byID := map[string]Offer{}
+	order := make([]string, 0, len(broadcast)+len(swept))
+	add := func(o Offer) {
+		key := o.DeviceID
+		if key == "" {
+			key = o.Device + "|" + o.BaseURL()
+		}
+		if _, exists := byID[key]; !exists {
+			order = append(order, key)
+		}
+		byID[key] = o
+	}
+	for _, o := range broadcast {
+		add(o)
+	}
+	for _, o := range swept {
+		add(o)
+	}
+	out := make([]Offer, 0, len(order))
+	for _, k := range order {
+		out = append(out, byID[k])
+	}
+	return out
+}
+
+// sweepLAN performs a unicast sweep of every LAN host and returns the phones
+// that answered. Used when UDP broadcast is filtered by the network.
+func sweepLAN() []Offer {
+	return sweepLANOffers(900 * time.Millisecond)
 }
 
 // pickOffers applies the selector and (when interactive) asks the user.
