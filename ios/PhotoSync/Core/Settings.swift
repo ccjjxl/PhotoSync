@@ -169,14 +169,14 @@ final class Settings: @unchecked Sendable {
 
     // MARK: - Derived names
 
-    /// User-set name, falling back to the hardware model.
+    /// User-set name, falling back to the marketing model ("iPhone 6s").
+    ///
+    /// `UIDevice.current.model` only says "iPhone", which cannot distinguish
+    /// two paired devices, so the hardware identifier is resolved to a real name.
     func effectiveDeviceName() -> String {
         let custom = defaults.string(forKey: Key.deviceName) ?? ""
         if !custom.isEmpty { return custom }
-        var model = UIDevice.current.model
-        if model.hasPrefix("iPhone") { model = "iPhone" }
-        else if model.hasPrefix("iPad") { model = "iPad" }
-        return model
+        return DeviceInfo.marketingName
     }
 
     /// Folder name used on the PC: "iPhone-3a04a9cd".

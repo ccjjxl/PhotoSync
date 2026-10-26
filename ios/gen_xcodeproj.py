@@ -38,6 +38,13 @@ def stable_id(*parts: str) -> str:
     return digest[:24].upper()
 
 
+ASSET_CATALOG = "Assets.xcassets"
+
+
+def has_asset_catalog() -> bool:
+    return os.path.isdir(os.path.join(SOURCE_ROOT, ASSET_CATALOG))
+
+
 def discover_sources() -> dict[str, list[str]]:
     """Maps group name -> sorted list of file names inside that group."""
     groups: dict[str, list[str]] = {}
@@ -65,7 +72,7 @@ class Project:
 
 
 def build(groups: dict[str, list[str]], deployment: str, version: str,
-          build_number: str) -> str:
+          build_number: str, team: str = "") -> str:
     # ---- ids -------------------------------------------------------------
     id_project = stable_id("project")
     id_target = stable_id("target")
@@ -97,6 +104,10 @@ def build(groups: dict[str, list[str]], deployment: str, version: str,
             group_children[group].append(ref)
             build_files.append((bf, ref))
 
+    id_assets_ref = stable_id("fileref", "assets")
+    id_assets_build = stable_id("buildfile", "assets")
+    use_assets = has_asset_catalog()
+
     # ---- sections --------------------------------------------------------
     out: list[str] = []
     w = out.append
@@ -113,6 +124,9 @@ def build(groups: dict[str, list[str]], deployment: str, version: str,
     w("\n/* Begin PBXBuildFile section */")
     for bf, ref in build_files:
         w(f"\t\t{bf} /* file */ = {{isa = PBXBuildFile; fileRef = {ref} /* file */; }};")
+    if use_assets:
+        w(f"\t\t{id_assets_build} /* {ASSET_CATALOG} in Resources */ = {{isa = PBXBuildFile; "
+          f"fileRef = {id_assets_ref} /* {ASSET_CATALOG} */; }};")
     w("/* End PBXBuildFile section */")
 
     # PBXFileReference
@@ -120,6 +134,10 @@ def build(groups: dict[str, list[str]], deployment: str, version: str,
     w(f'\t\t{id_product} /* {PRODUCT_NAME}.app */ = {{isa = PBXFileReference; '
       f'explicitFileType = wrapper.application; includeInIndex = 0; '
       f'path = {PRODUCT_NAME}.app; sourceTree = BUILT_PRODUCTS_DIR; }};')
+    if use_assets:
+        w(f'\t\t{id_assets_ref} /* {ASSET_CATALOG} */ = {{isa = PBXFileReference; '
+          f'lastKnownFileType = folder.assetcatalog; path = {ASSET_CATALOG}; '
+          f'sourceTree = "<group>"; }};')
     for ref, name, _group, path in file_refs:
         w(f'\t\t{ref} /* {name} */ = {{isa = PBXFileReference; '
           f'lastKnownFileType = sourcecode.swift; path = "{path}"; '
@@ -154,6 +172,8 @@ def build(groups: dict[str, list[str]], deployment: str, version: str,
     w("\t\t\tchildren = (")
     for group in groups:
         w(f"\t\t\t\t{stable_id('group', group)} /* {group} */,")
+    if use_assets:
+        w(f"\t\t\t\t{id_assets_ref} /* {ASSET_CATALOG} */,")
     w("\t\t\t);")
     w(f'\t\t\tpath = {SOURCE_ROOT};')
     w('\t\t\tsourceTree = "<group>";')
@@ -242,6 +262,8 @@ def build(groups: dict[str, list[str]], deployment: str, version: str,
     w("\t\t\tisa = PBXResourcesBuildPhase;")
     w("\t\t\tbuildActionMask = 2147483647;")
     w("\t\t\tfiles = (")
+    if use_assets:
+        w(f"\t\t\t\t{id_assets_build} /* {ASSET_CATALOG} in Resources */,")
     w("\t\t\t);")
     w("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
     w("\t\t};")
@@ -287,10 +309,11 @@ def build(groups: dict[str, list[str]], deployment: str, version: str,
     def target_settings(config: str) -> str:
         opt = "-O" if config == "Release" else "-Onone"
         return f"""
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = {build_number};
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "{team}";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "{SOURCE_ROOT}/Info.plist";
@@ -445,6 +468,8 @@ def main() -> int:
     parser.add_argument("--deployment", default="15.0")
     parser.add_argument("--version", default=None)
     parser.add_argument("--build-number", default="1")
+    parser.add_argument("--team", default=os.environ.get("PHOTOSYNC_TEAM", ""),
+                        help="Apple Developer Team ID；留空则不签名")
     args = parser.parse_args()
 
     version = args.version
@@ -470,7 +495,7 @@ def main() -> int:
         shutil.rmtree(out)
     os.makedirs(os.path.join(out, "xcshareddata", "xcschemes"), exist_ok=True)
 
-    pbxproj = build(groups, args.deployment, version, args.build_number)
+    pbxproj = build(groups, args.deployment, version, args.build_number, args.team)
     with open(os.path.join(out, "project.pbxproj"), "w") as handle:
         handle.write(pbxproj)
 
@@ -482,8 +507,11 @@ def main() -> int:
 
     print(f"✓ 已生成 {out}")
     print(f"  版本 {version} ({args.build_number}) · iOS {args.deployment}+")
+    print(f"  签名 Team: {args.team or '（未设置，仅模拟器可用）'}")
     for group, files in groups.items():
         print(f"  {group}/: {len(files)} 个文件")
+    if has_asset_catalog():
+        print(f"  {ASSET_CATALOG}: 已包含 AppIcon")
     print(f"  共 {total} 个 Swift 文件")
     return 0
 

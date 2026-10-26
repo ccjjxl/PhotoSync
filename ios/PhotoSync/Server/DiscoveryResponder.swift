@@ -31,24 +31,57 @@ enum NetworkInfo {
                     if getnameinfo(addr, length, &host, socklen_t(host.count),
                                    nil, 0, NI_NUMERICHOST) == 0 {
                         let name = String(cString: current.pointee.ifa_name)
-                        // en0 is Wi-Fi on iPhone; pdp_ip* is cellular (not LAN).
-                        let isWifi = name == "en0" || name.hasPrefix("en")
-                        if !name.hasPrefix("pdp_ip") {
-                            results.append(Address(ip: String(cString: host), iface: name, isWifi: isWifi))
+                        let ip = String(cString: host)
+
+                        // Skip cellular data interfaces (pdp_ip*) and link-local
+                        // addresses (169.254.x.x). iOS creates a self-assigned
+                        // link-local address on the Wi-Fi interface whenever the
+                        // DHCP lease is missing or stale — it is useless for the
+                        // desktop client, and it used to sort first, so the app
+                        // displayed an address that could never work.
+                        let ignored = ["tun", "tap", "ppp", "ipsec", "utun", "awdl", "llw", "bridge"]
+                        guard !name.hasPrefix("pdp_ip"),
+                              !ignored.contains(where: { name.hasPrefix($0) }),
+                              !ip.hasPrefix("169.254.") else {
+                            pointer = current.pointee.ifa_next
+                            continue
                         }
+
+                        let isWifi = name == "en0" || name.hasPrefix("en")
+                        results.append(Address(ip: ip, iface: name, isWifi: isWifi))
                     }
                 }
             }
             pointer = current.pointee.ifa_next
         }
 
+        // Prefer real LAN addresses: private Wi-Fi ranges first, then other Wi-Fi,
+        // then everything else.
+        func rank(_ address: Address) -> Int {
+            if address.isWifi && Self.isPrivate(address.ip) { return 0 }
+            if address.isWifi { return 1 }
+            return Self.isPrivate(address.ip) ? 2 : 3
+        }
         return results.sorted { lhs, rhs in
-            if lhs.isWifi != rhs.isWifi { return lhs.isWifi }
+            let l = rank(lhs), r = rank(rhs)
+            if l != r { return l < r }
             return lhs.ip < rhs.ip
         }
     }
 
     static func primaryAddress() -> String? { addresses().first?.ip }
+
+    /// RFC 1918 private ranges — the ones a home LAN actually uses.
+    static func isPrivate(_ ip: String) -> Bool {
+        let parts = ip.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return false }
+        switch (parts[0], parts[1]) {
+        case (10, _): return true
+        case (192, 168): return true
+        case (172, 16...31): return true
+        default: return false
+        }
+    }
 }
 
 /// Answers the desktop client's UDP discovery probe.
@@ -131,7 +164,7 @@ final class DiscoveryResponder: @unchecked Sendable {
             "device": settings.effectiveDeviceName(),
             "deviceId": snapshot.deviceId,
             "folder": settings.folderName(),
-            "model": UIDevice.current.model,
+            "model": DeviceInfo.marketingName,
             "port": Int(advertisedPort),
             "openAccess": snapshot.openAccess,
             "folderFilter": !snapshot.selectedAlbums.isEmpty,

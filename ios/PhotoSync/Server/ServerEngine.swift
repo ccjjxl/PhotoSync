@@ -34,6 +34,42 @@ final class ServerEngine: @unchecked Sendable {
     private(set) var running = false
     private(set) var lastError: String?
 
+    /// Counters for the "this session" card, matching Android's behaviour.
+    private(set) var servedBytes: Int64 = 0
+    private(set) var servedFiles: Int64 = 0
+    private let counterLock = NSLock()
+
+    func recordServed(bytes: Int64) {
+        counterLock.lock()
+        servedBytes += bytes
+        servedFiles += 1
+        counterLock.unlock()
+    }
+
+    func resetCounters() {
+        counterLock.lock()
+        servedBytes = 0
+        servedFiles = 0
+        counterLock.unlock()
+    }
+
+    /// Size of the on-disk spool cache (the iOS equivalent of the thumbnail cache).
+    func cacheSize() -> Int64 {
+        Self.spoolDirectorySize()
+    }
+
+    func clearCache() throws {
+        let directory = Self.spoolDirectory()
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil)) ?? []
+        for file in files {
+            try? FileManager.default.removeItem(at: file)
+        }
+        thumbLock.lock()
+        thumbCache.removeAll(keepingCapacity: true)
+        thumbLock.unlock()
+    }
+
     /// Notifies the UI about state changes (main queue).
     var onStateChange: (() -> Void)?
 
@@ -51,6 +87,7 @@ final class ServerEngine: @unchecked Sendable {
             self?.lastError = error
             self?.onStateChange?()
         }
+        Self.trimSpool()
         server = engine
         engine.start()
         discovery.start(port: port)
@@ -179,9 +216,10 @@ final class ServerEngine: @unchecked Sendable {
             "device": settings.effectiveDeviceName(),
             "deviceId": snapshot.deviceId,
             "folder": settings.folderName(),
-            "model": UIDevice.current.model,
+            "model": DeviceInfo.marketingName,
+            "hardware": DeviceInfo.machineIdentifier,
             "manufacturer": "Apple",
-            "android": "iOS \(UIDevice.current.systemVersion)",
+            "android": DeviceInfo.systemDescription,
             "platform": "ios",
             "port": snapshot.port,
             "openAccess": snapshot.openAccess,
@@ -203,11 +241,18 @@ final class ServerEngine: @unchecked Sendable {
         thumbLock.lock()
         let cached = thumbCache.count
         thumbLock.unlock()
+        counterLock.lock()
+        let served = servedBytes
+        let files = servedFiles
+        counterLock.unlock()
         return json(200, [
             "photos": counts.photos,
             "videos": counts.videos,
             "bytes": counts.bytes,
             "thumbCached": cached,
+            "served": served,
+            "servedFiles": files,
+            "cacheBytes": cacheSize(),
         ])
     }
 
@@ -319,6 +364,10 @@ final class ServerEngine: @unchecked Sendable {
             }
         }
 
+        if let size = (try? FileManager.default.attributesOfItem(atPath: target.path)[.size]) as? NSNumber {
+            recordServed(bytes: size.int64Value)
+        }
+
         let mime = MediaRepository.mimeType(for: name, isVideo: asset.mediaType == .video)
         let modified = Int(asset.modificationDate?.timeIntervalSince1970 ?? 0)
         let etag = "\"\(MediaItem.stableHash(id))-\(modified)\""
@@ -331,14 +380,62 @@ final class ServerEngine: @unchecked Sendable {
 
     /// PhotoKit can only hand out an asset by writing it to a file, so we keep
     /// one spool copy per asset and let the HTTP layer stream it.
-    private static func spoolURL(for id: String, name: String) -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("photosync-files", isDirectory: true)
+    ///
+    /// Lives in Caches (not tmp) so it survives app restarts: re-downloading a
+    /// 4K video from iCloud because the app was relaunched is the single biggest
+    /// performance trap on iOS.
+    static func spoolDirectory() -> URL {
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let directory = caches.appendingPathComponent("PhotoSyncFiles", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory,
                                                  withIntermediateDirectories: true)
+        return directory
+    }
+
+    static func spoolDirectorySize() -> Int64 {
+        let directory = spoolDirectory()
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        return files.reduce(Int64(0)) { total, url in
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            return total + Int64(size)
+        }
+    }
+
+    private static func spoolURL(for id: String, name: String) -> URL {
+        let directory = spoolDirectory()
         // Hash the identifier: localIdentifiers contain slashes.
         let safeName = name.replacingOccurrences(of: "/", with: "_")
         return directory.appendingPathComponent("\(MediaItem.stableHash(id))-\(safeName)")
+    }
+
+    /// Trims the spool directory to `budget` bytes, oldest files first.
+    ///
+    /// Called before starting the server so a 3 GB library does not fill the
+    /// device's cache.
+    static func trimSpool(budget: Int64 = 2 * 1024 * 1024 * 1024) {
+        let directory = spoolDirectory()
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey]
+        ) else { return }
+
+        var entries: [(url: URL, date: Date, size: Int64)] = []
+        for url in files {
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+            entries.append((url,
+                            values?.contentModificationDate ?? .distantPast,
+                            Int64(values?.fileSize ?? 0)))
+        }
+        var total = entries.reduce(Int64(0)) { $0 + $1.size }
+        guard total > budget else { return }
+
+        for entry in entries.sorted(by: { $0.date < $1.date }) {
+            if total <= budget { break }
+            try? FileManager.default.removeItem(at: entry.url)
+            total -= entry.size
+        }
     }
 
     private func gallery(_ request: HttpServer.Request) -> HttpServer.Response {

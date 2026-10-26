@@ -20,6 +20,11 @@ CONFIG="Debug"
 DEST="generic/platform=iOS Simulator"
 DOWNLOAD=0
 VERSION=$(tr -d '[:space:]' < VERSION 2>/dev/null || echo "1.2.0")
+# Team ID can come from --team, $PHOTOSYNC_TEAM, or ios/.team (git-ignored).
+if [ -z "${PHOTOSYNC_TEAM:-}" ] && [ -f "$REPO_ROOT/ios/.team" ]; then
+  PHOTOSYNC_TEAM=$(tr -d '[:space:]' < "$REPO_ROOT/ios/.team")
+fi
+TEAM="${PHOTOSYNC_TEAM:-}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -29,6 +34,7 @@ while [ $# -gt 0 ]; do
     --release) CONFIG="Release"; DEST="generic/platform=iOS Simulator"; shift ;;
     --download) DOWNLOAD=1; shift ;;
     --version) VERSION="$2"; shift 2 ;;
+    --team) TEAM="$2"; shift 2 ;;
     -h|--help) sed -n '1,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 2 ;;
   esac
@@ -60,8 +66,11 @@ echo "   macOS $MACOS · Xcode $XCODE · $ARCH"
 [ -n "$XCODE" ] || fail "远端没有可用的 xcodebuild（需要安装 Xcode 并执行 xcode-select）"
 
 # ---------------------------------------------------------------- generate project
+step "生成 App 图标"
+( cd "$REPO_ROOT/ios" && python3 gen_appicon.py )
+
 step "生成 Xcode 工程（无需 XcodeGen）"
-( cd ios && python3 gen_xcodeproj.py --version "$VERSION" --build-number "${BUILD_NUMBER:-1}" )
+( cd ios && python3 gen_xcodeproj.py --version "$VERSION" --build-number "${BUILD_NUMBER:-1}" --team "$TEAM" )
 
 # ---------------------------------------------------------------- sync sources
 step "同步源码到 $REMOTE:$REMOTE_DIR"
@@ -76,6 +85,15 @@ echo "   已同步 $(find ios -name '*.swift' | wc -l | tr -d ' ') 个 Swift 文
 
 # ---------------------------------------------------------------- build
 step "在远端构建（$CONFIG · $DEST）"
+# Simulator builds skip signing; device builds must be signed.
+if [ "$CONFIG" = "Release" ] && [ "$DEST" = "generic/platform=iOS" ]; then
+  SIGNING_FLAG="DEVELOPMENT_TEAM=$TEAM"
+  [ -n "$TEAM" ] || fail "真机构建需要 Team ID：--team DQUV87K656"
+else
+  SIGNING_FLAG="CODE_SIGNING_ALLOWED=NO"
+fi
+export SIGNING_FLAG
+
 set +e
 ssh -o BatchMode=yes "$REMOTE" "cd $REMOTE_DIR/ios && \
   xcodebuild \
@@ -85,7 +103,7 @@ ssh -o BatchMode=yes "$REMOTE" "cd $REMOTE_DIR/ios && \
     -destination '$DEST' \
     -derivedDataPath build \
     MARKETING_VERSION=$VERSION \
-    CODE_SIGNING_ALLOWED=NO \
+    $SIGNING_FLAG \
     build 2>&1 | tail -60" 
 BUILD_STATUS=$?
 set -e

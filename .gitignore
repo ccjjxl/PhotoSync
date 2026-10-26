@@ -19,6 +19,7 @@ android/keystore.properties
 !android/app/debug.keystore
 
 # iOS / Xcode
+ios/.team
 ios/*.xcodeproj/
 ios/*.xcworkspace/
 ios/DerivedData/

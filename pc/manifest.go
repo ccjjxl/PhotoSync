@@ -24,11 +24,11 @@ type Manifest struct {
 
 // Entry is one synced file.
 type Entry struct {
-	ID    int64  `json:"id"`
-	Size  int64  `json:"size"`
-	Mtime int64  `json:"mtime"`
-	Local string `json:"local"` // path relative to the output directory
-	At    string `json:"at"`
+	ID    FlexString `json:"id"`
+	Size  int64      `json:"size"`
+	Mtime int64      `json:"mtime"`
+	Local string     `json:"local"` // path relative to the output directory
+	At    string     `json:"at"`
 }
 
 const manifestName = ".photosync-manifest.json"
