@@ -267,22 +267,3 @@ fun GradientHero(modifier: Modifier = Modifier, content: @Composable () -> Unit)
     ) { content() }
 }
 
-@Composable
-fun Chip(text: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-            .padding(horizontal = 11.dp, vertical = 6.dp),
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}

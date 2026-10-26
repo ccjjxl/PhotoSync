@@ -90,6 +90,10 @@ type DeviceInfo struct {
 	Videos       int       `json:"videos"`
 	Bytes        int64     `json:"bytes"`
 	Addresses    []Address `json:"addresses"`
+	// FolderFilter is true when the phone restricts syncing to specific folders.
+	FolderFilter bool `json:"folderFilter"`
+	// Folders lists the enabled folders ("all" when unrestricted).
+	Folders string `json:"folders"`
 }
 
 // BestIP picks the device's preferred LAN address.
@@ -287,8 +291,9 @@ func (c *Client) Handshake(ctx context.Context) error {
 // ErrUnauthorized means the token is missing or stale.
 var ErrUnauthorized = errors.New("未授权：需要配对")
 
-// List fetches one page of media metadata.
-func (c *Client) List(ctx context.Context, since int64, offset, limit int, videos bool) (*ListResponse, error) {
+// List fetches one page of media metadata. When folder is non-empty the phone
+// narrows the result to that folder server-side.
+func (c *Client) List(ctx context.Context, since int64, offset, limit int, videos bool, folder string) (*ListResponse, error) {
 	q := url.Values{}
 	q.Set("since", strconv.FormatInt(since, 10))
 	q.Set("offset", strconv.Itoa(offset))
@@ -296,6 +301,9 @@ func (c *Client) List(ctx context.Context, since int64, offset, limit int, video
 	q.Set("asc", "1")
 	if !videos {
 		q.Set("videos", "0")
+	}
+	if folder != "" {
+		q.Set("folder", folder)
 	}
 	resp, err := c.do(ctx, http.MethodGet, "/api/list?"+q.Encode(), nil)
 	if err != nil {
@@ -313,6 +321,36 @@ func (c *Client) List(ctx context.Context, since int64, offset, limit int, video
 		return nil, err
 	}
 	return &out, nil
+}
+
+// FolderEntry is one album on the phone.
+type FolderEntry struct {
+	Path    string `json:"path"`
+	Count   int    `json:"count"`
+	Enabled bool   `json:"enabled"`
+}
+
+// Folders lists the phone's albums and whether each is enabled for syncing.
+func (c *Client) Folders(ctx context.Context) ([]FolderEntry, bool, error) {
+	resp, err := c.do(ctx, http.MethodGet, "/api/folders", nil)
+	if err != nil {
+		return nil, false, err
+	}
+	defer drainClose(resp)
+	if resp.StatusCode == 401 {
+		return nil, false, ErrUnauthorized
+	}
+	if resp.StatusCode != 200 {
+		return nil, false, fmt.Errorf("folders: http %d", resp.StatusCode)
+	}
+	var out struct {
+		FilterActive bool          `json:"filterActive"`
+		Folders      []FolderEntry `json:"folders"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, false, err
+	}
+	return out.Folders, out.FilterActive, nil
 }
 
 // FileURL is the direct download URL for an item.

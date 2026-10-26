@@ -27,6 +27,7 @@ const usageText = `PhotoSync 桌面客户端 %s — 快速把安卓照片同步�
   sync-client                     启动交互式向导（推荐）
   sync-client sync [参数]         同步所有已配对手机
   sync-client devices             列出已配对手机
+  sync-client folders             列出手机上的相簿及是否同步
   sync-client discover            扫描局域网内的手机
   sync-client pair --host IP      与手机配对
   sync-client forget <设备>       移除已配对手机
@@ -49,6 +50,7 @@ const usageText = `PhotoSync 桌面客户端 %s — 快速把安卓照片同步�
 sync 参数:
   --host IP[:PORT]     指定手机地址（跳过自动发现）
   --device NAME|ID     只同步匹配的手机（可重复使用，逗号分隔）
+  --folder PATH        只同步指定文件夹（可重复或逗号分隔）
   --all                同步所有发现的手机（多设备时的默认行为）
   --out DIR            相册根目录（默认 ~/Pictures/Android），每台手机一个子目录
   --flat-dir           所有手机平铺到 --out，不用子目录（不推荐）
@@ -86,6 +88,8 @@ func main() {
 		os.Exit(runDiscover(args[1:]))
 	case "pair":
 		os.Exit(runPair(args[1:]))
+	case "folders", "albums":
+		os.Exit(runFolders(args[1:]))
 	case "devices", "list":
 		os.Exit(runDevices(args[1:]))
 	case "forget", "remove":
@@ -520,6 +524,8 @@ func runSync(args []string) int {
 	)
 	var deviceSel multiFlag
 	fs.Var(&deviceSel, "device", "只同步匹配的手机（名称/ID/目录，可重复或逗号分隔）")
+	var folderSel multiFlag
+	fs.Var(&folderSel, "folder", "只同步这些文件夹（可重复或逗号分隔）")
 	fs.Usage = func() { fmt.Printf(usageText, version) }
 	_ = fs.Parse(args)
 
@@ -655,6 +661,7 @@ func runSync(args []string) int {
 				opts := Options{
 					OutDir:        dir,
 					Workers:       *workers,
+					Folders:       folderSel,
 					IncludeVideos: !*noVideos && conn.Device.VideosEnabled(),
 					Mode:          mode,
 					DryRun:        *dryRun,
@@ -928,6 +935,53 @@ func runPair(args []string) int {
 		fmt.Printf("  %-22s 保存到 %s\n", "", cfg.DeviceDir(c.Device))
 	}
 	fmt.Printf("\n配置已保存到 %s\n", ConfigPath())
+	return 0
+}
+
+// runFolders prints the albums on each phone and whether they are enabled.
+func runFolders(args []string) int {
+	fs := flag.NewFlagSet("folders", flag.ExitOnError)
+	host := fs.String("host", "", "手机地址")
+	port := fs.Int("port", 0, "端口")
+	code := fs.String("code", "", "配对码")
+	_ = fs.Parse(args)
+
+	cfg := cfgOrDie()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	conns, err := connectAll(ctx, cfg, Selector{Host: *host, Port: *port, All: true, Quiet: true},
+		*code, "", isTTY())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "✗ %v\n", err)
+		return 1
+	}
+
+	for _, c := range conns {
+		folders, filtering, err := c.Client.Folders(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "✗ %s: %v\n", c.Device.Name, err)
+			continue
+		}
+		info := c.Client.Device()
+		fmt.Printf("\n%s (%s)\n", c.Device.Name, c.Device.ID)
+		if filtering {
+			fmt.Println("  手机端已限定同步范围（在 App 内「同步文件夹」中修改）")
+		} else if info.FolderFilter {
+			fmt.Println("  手机端已限定同步范围")
+		} else {
+			fmt.Println("  同步全部文件夹")
+		}
+		fmt.Printf("  %-44s %8s  %s\n", "文件夹", "数量", "状态")
+		for _, f := range folders {
+			state := "✓ 同步"
+			if !f.Enabled {
+				state = "— 已排除"
+			}
+			fmt.Printf("  %-44s %8d  %s\n", clip(f.Path, 44), f.Count, state)
+		}
+	}
+	fmt.Println("\n提示: 用 --folder <路径> 只同步某个文件夹（手机端必须已允许它）。")
 	return 0
 }
 

@@ -78,6 +78,7 @@ fun SettingsSheet(
                 Sheet.Settings -> SettingsContent(state, vm)
                 Sheet.Help -> HelpContent(state)
                 Sheet.Library -> LibraryContent(state, vm)
+                Sheet.Folders -> FolderPickerContent(state, vm)
             }
         }
     }
@@ -181,6 +182,37 @@ private fun SettingsContent(state: UiState, vm: MainViewModel) {
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+
+    // ---------------------------------------------------------- folders
+    Column(Modifier.padding(bottom = 18.dp)) {
+        Text("同步文件夹", style = MaterialTheme.typography.titleMedium)
+        Text(
+            if (state.selectedFolders.isEmpty())
+                "当前同步全部 ${state.allFolders.size} 个文件夹"
+            else "只同步已选的 ${state.selectedFolders.size} 个文件夹",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state.selectedFolders.isEmpty())
+                MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(10.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                .clickable { vm.openFolderPicker() }
+                .padding(vertical = 13.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "选择要同步的文件夹",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
         }
     }
 

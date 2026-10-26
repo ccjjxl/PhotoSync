@@ -149,23 +149,56 @@ fun HomeScreen(
 
         // ---------------------------------------------------------- folders
         if (state.folders.isNotEmpty()) {
-            SectionTitle("相簿") {
-                Text(
-                    "${state.folders.size} 个",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            val filtering = state.selectedFolders.isNotEmpty()
+            SectionTitle("同步文件夹") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (filtering) "已选 ${state.selectedFolders.size}/${state.folders.size}"
+                        else "全部 ${state.folders.size} 个",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (filtering) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant,
+                                RoundedCornerShape(50),
+                            )
+                            .clickable { onOpenSheet(Sheet.Folders) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            "选择",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                state.folders.take(6).forEach { (path, count) ->
-                    FolderRow(path, count)
+                val shown = if (filtering) {
+                    state.folders.filter { it.first in state.selectedFolders }
+                } else {
+                    state.folders
                 }
-                if (state.folders.size > 6) {
+                shown.take(6).forEach { (path, count) ->
+                    FolderRow(path, count, enabled = true)
+                }
+                val hidden = state.folders.size - shown.take(6).size
+                if (hidden > 0) {
                     Text(
-                        "另有 ${state.folders.size - 6} 个相簿…",
+                        if (filtering) "另有 $hidden 个文件夹未选择同步…"
+                        else "另有 $hidden 个相簿…",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+                        modifier = Modifier
+                            .padding(start = 4.dp, top = 2.dp)
+                            .clickable { onOpenSheet(Sheet.Folders) },
                     )
                 }
             }
@@ -408,7 +441,7 @@ private fun SmallPill(text: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FolderRow(path: String, count: Int) {
+private fun FolderRow(path: String, count: Int, enabled: Boolean = true) {
     Card2(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),

@@ -31,6 +31,9 @@ type Options struct {
 	Flat          bool // drop folders, put everything in one directory
 	// Label identifies the device in multi-device runs (log prefix).
 	Label string
+	// Folders restricts the run to these device folders (empty = whatever the
+	// phone allows). Each folder is fetched with its own paginated query.
+	Folders []string
 }
 
 // SyncMode selects full vs incremental behaviour.
@@ -188,46 +191,55 @@ func (s *Syncer) Stats() *Stats { return s.stats }
 func (s *Syncer) Run(ctx context.Context) error {
 	// ---------------------------------------------------------- discovery phase
 	var items []MediaItem
-	offset := 0
 	since := s.opts.Since
 	if s.opts.Mode == ModeFull {
 		since = 0
 	}
 
-	for {
-		page, err := s.client.List(ctx, since, offset, s.opts.PageSize, s.opts.IncludeVideos)
-		if err != nil {
-			if errors.Is(err, ErrUnauthorized) {
-				return err
-			}
-			// retry page a few times, transient Wi-Fi hiccups are normal
-			var lastErr error = err
-			ok := false
-			for attempt := 1; attempt <= s.opts.MaxRetries; attempt++ {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(time.Duration(attempt) * 400 * time.Millisecond):
-				}
-				page, err = s.client.List(ctx, since, offset, s.opts.PageSize, s.opts.IncludeVideos)
-				if err == nil {
-					ok = true
-					break
-				}
-				lastErr = err
-			}
-			if !ok {
-				return fmt.Errorf("获取列表失败: %w", lastErr)
-			}
-		}
+	// One paginated walk per requested folder (or a single walk over whatever
+	// the phone allows when no folder was requested).
+	folderList := s.opts.Folders
+	if len(folderList) == 0 {
+		folderList = []string{""}
+	}
 
-		items = append(items, page.Items...)
-		offset += len(page.Items)
-		if len(page.Items) == 0 || !page.HasMore || offset >= page.Total {
-			break
-		}
-		if len(page.Items) < s.opts.PageSize {
-			break
+	for _, folderArg := range folderList {
+		offset := 0
+		for {
+			page, err := s.client.List(ctx, since, offset, s.opts.PageSize, s.opts.IncludeVideos, folderArg)
+			if err != nil {
+				if errors.Is(err, ErrUnauthorized) {
+					return err
+				}
+				// retry page a few times, transient Wi-Fi hiccups are normal
+				var lastErr error = err
+				ok := false
+				for attempt := 1; attempt <= s.opts.MaxRetries; attempt++ {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(time.Duration(attempt) * 400 * time.Millisecond):
+					}
+					page, err = s.client.List(ctx, since, offset, s.opts.PageSize, s.opts.IncludeVideos, folderArg)
+					if err == nil {
+						ok = true
+						break
+					}
+					lastErr = err
+				}
+				if !ok {
+					return fmt.Errorf("获取列表失败: %w", lastErr)
+				}
+			}
+
+			items = append(items, page.Items...)
+			offset += len(page.Items)
+			if len(page.Items) == 0 || !page.HasMore || offset >= page.Total {
+				break
+			}
+			if len(page.Items) < s.opts.PageSize {
+				break
+			}
 		}
 	}
 

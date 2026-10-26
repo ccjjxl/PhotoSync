@@ -40,6 +40,7 @@ class ServerEngine(
         deviceIdProvider = { settings.snapshot().deviceId },
         folderNameProvider = { settings.folderName() },
         openAccessProvider = { settings.snapshot().openAccess },
+        folderFilterProvider = { settings.currentFolders().isNotEmpty() },
     )
 
 
@@ -153,6 +154,9 @@ class ServerEngine(
         }
     }
 
+    /** Folders the phone is allowed to expose; empty = everything. */
+    private fun allowedFolders(): Set<String> = settings.currentFolders()
+
     private fun authorized(req: HttpRequest): Boolean {
         val snap = settings.snapshot()
         if (snap.openAccess) return true
@@ -205,7 +209,8 @@ class ServerEngine(
 
     private fun info(req: HttpRequest): HttpResponse {
         val snap = settings.snapshot()
-        val st = repository.stats(snap.includeVideos)
+        val folders = allowedFolders()
+        val st = repository.stats(snap.includeVideos, folders)
         val urls = Net.localAddresses().map { it.ip to it.iface }
         return HttpResponse.json(
             200,
@@ -226,6 +231,8 @@ class ServerEngine(
                 field("photos", st.photos)
                 field("videos", st.videos)
                 field("bytes", st.bytes)
+                field("folderFilter", folders.isNotEmpty())
+                field("folders", if (folders.isEmpty()) "all" else folders.sorted().joinToString(","))
                 field("server", "PhotoSync/1.0")
                 arr("addresses") {
                     urls.forEach { (ip, iface) ->
@@ -238,7 +245,8 @@ class ServerEngine(
 
     private fun stats(req: HttpRequest): HttpResponse {
         val snap = settings.snapshot()
-        val st = repository.stats(snap.includeVideos)
+        val folders = allowedFolders()
+        val st = repository.stats(snap.includeVideos, folders)
         val (hits, misses) = thumbnailProvider.stats()
         return HttpResponse.json(
             200,
@@ -257,11 +265,19 @@ class ServerEngine(
 
     private fun folders(req: HttpRequest): HttpResponse {
         val list = repository.folders()
+        val enabled = allowedFolders()
         return HttpResponse.json(
             200,
             json {
+                field("filterActive", enabled.isNotEmpty())
                 arr("folders") {
-                    list.forEach { (p, c) -> obj { field("path", p); field("count", c) } }
+                    list.forEach { (p, c) ->
+                        obj {
+                            field("path", p)
+                            field("count", c)
+                            field("enabled", enabled.isEmpty() || p in enabled)
+                        }
+                    }
                 }
             },
         )
@@ -276,19 +292,33 @@ class ServerEngine(
         val ascending = req.qBool("asc", true)
         val folder = req.q("folder")
 
+        // The phone-side whitelist always wins: a client cannot request folders
+        // the user did not enable.
+        val allowed = allowedFolders()
+        val effectiveFolders = when {
+            folder != null && allowed.isNotEmpty() && folder !in allowed -> emptySet<String>() // nothing allowed
+            folder != null -> setOf(folder)
+            else -> allowed
+        }
+
         val q = MediaRepository.Query(
             since = since,
             includeImages = images,
             includeVideos = videos,
             folder = folder,
+            folders = effectiveFolders,
             limit = limit,
             offset = offset,
             ascending = ascending,
         )
-        var items: List<MediaItem> = repository.query(q)
+        var items: List<MediaItem> = if (folder != null && effectiveFolders.isEmpty() && allowed.isNotEmpty()) {
+            emptyList()
+        } else {
+            repository.query(q)
+        }
         if (folder != null) items = items.filter { it.folder == folder }
 
-        val total = repository.count(since, videos)
+        val total = repository.count(since, videos, allowed)
         return HttpResponse.json(
             200,
             json {

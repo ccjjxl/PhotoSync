@@ -33,6 +33,9 @@ data class UiState(
     val deviceName: String = "",
     val deviceId: String = "",
     val folderName: String = "",
+    /** Folders the user enabled; empty = all folders. */
+    val selectedFolders: Set<String> = emptySet(),
+    val allFolders: List<Pair<String, Int>> = emptyList(),
     val servedBytes: Long = 0,
     val servedFiles: Long = 0,
     val thumbCacheBytes: Long = 0,
@@ -60,6 +63,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 deviceName = settings.effectiveDeviceName(),
                 deviceId = settings.snapshot().deviceId,
                 folderName = settings.folderName(),
+                selectedFolders = settings.snapshot().selectedFolders,
             )
         }
         viewModelScope.launch {
@@ -114,7 +118,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update { it.copy(loadingLibrary = !quiet) }
             val snap = settings.snapshot()
-            val stats = withContext(Dispatchers.IO) { repo.stats(snap.includeVideos) }
+            val selected = settings.snapshot().selectedFolders
+            val stats = withContext(Dispatchers.IO) { repo.stats(snap.includeVideos, selected) }
             val folders = withContext(Dispatchers.IO) { repo.folders(60) }
             val recent = withContext(Dispatchers.IO) {
                 repo.query(
@@ -131,6 +136,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     videos = stats.videos,
                     bytes = stats.bytes,
                     folders = folders,
+                    allFolders = folders,
+                    selectedFolders = settings.snapshot().selectedFolders,
                     recent = recent,
                     loadingLibrary = false,
                     thumbCacheBytes = graph.thumbnails.diskCacheSize(),
@@ -141,6 +148,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private var loading = false
+
+    /** Set when the ViewModel wants the UI to open the folder picker. */
+    private val _openFolders = MutableStateFlow(false)
+    val openFolders: StateFlow<Boolean> = _openFolders.asStateFlow()
+
+    fun openFolderPicker() {
+        _openFolders.value = true
+    }
+
+    fun consumeOpenFolders() {
+        _openFolders.value = false
+    }
 
     fun startServer() {
         viewModelScope.launch {
@@ -177,6 +196,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setIncludeVideos(v: Boolean) {
         settings.setIncludeVideos(v)
         _state.update { it.copy(settings = settings.snapshot()) }
+        loadLibrary()
+    }
+
+    /** Toggle one folder in the sync whitelist. */
+    fun toggleFolder(path: String) {
+        val current = settings.currentFolders().toMutableSet()
+        // An empty set means "all" — materialise it first so toggling is additive.
+        if (current.isEmpty()) {
+            current.addAll(_state.value.allFolders.map { it.first })
+        }
+        if (!current.remove(path)) current.add(path)
+        settings.setSelectedFolders(current)
+        afterFolderChange()
+    }
+
+    /** Keep only this folder selected. */
+    fun toggleFolderOnly(path: String) {
+        settings.setSelectedFolders(setOf(path))
+        afterFolderChange()
+    }
+
+    fun selectAllFolders() {
+        settings.selectAllFolders()
+        afterFolderChange()
+    }
+
+    fun clearFolderSelection() {
+        // Selecting nothing would silently sync nothing; treat it as "all".
+        settings.selectAllFolders()
+        afterFolderChange()
+    }
+
+    private fun afterFolderChange() {
+        _state.update { it.copy(selectedFolders = settings.snapshot().selectedFolders) }
         loadLibrary()
     }
 

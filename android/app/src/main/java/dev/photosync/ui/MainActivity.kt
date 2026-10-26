@@ -55,6 +55,15 @@ class MainActivity : ComponentActivity() {
                     dev.photosync.service.SyncService.start(applicationContext)
                 }
 
+                // The settings sheet can ask to jump straight into the folder picker.
+                val wantFolders by vm.openFolders.collectAsStateWithLifecycle()
+                LaunchedEffect(wantFolders) {
+                    if (wantFolders) {
+                        sheet = Sheet.Folders
+                        vm.consumeOpenFolders()
+                    }
+                }
+
                 Box(Modifier.fillMaxSize()) {
                     HomeScreen(
                         state = state,
@@ -128,4 +137,6 @@ sealed interface Sheet {
     data object Help : Sheet
     data object Settings : Sheet
     data object Library : Sheet
+    /** Manual folder picker for choosing what to sync. */
+    data object Folders : Sheet
 }

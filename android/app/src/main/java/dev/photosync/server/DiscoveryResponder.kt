@@ -20,6 +20,7 @@ class DiscoveryResponder(
     private val deviceIdProvider: () -> String,
     private val folderNameProvider: () -> String,
     private val openAccessProvider: () -> Boolean,
+    private val folderFilterProvider: () -> Boolean = { false },
 ) {
     private val running = AtomicBoolean(false)
     private var socket: DatagramSocket? = null
@@ -82,6 +83,7 @@ class DiscoveryResponder(
         field("model", android.os.Build.MODEL ?: "Android")
         field("port", portProvider())
         field("openAccess", openAccessProvider())
+        field("folderFilter", folderFilterProvider())
         field("host", InetAddress.getLocalHost().hostName ?: "")
         arr("addresses") {
             Net.localAddresses().forEach { a ->

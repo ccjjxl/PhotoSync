@@ -75,6 +75,8 @@ class MediaRepository(private val context: Context) {
         val includeImages: Boolean = true,
         val includeVideos: Boolean = true,
         val folder: String? = null,
+        /** Restrict to these RELATIVE_PATH prefixes; empty = no restriction. */
+        val folders: Set<String> = emptySet(),
         val limit: Int = 500,
         val offset: Int = 0,
         val ascending: Boolean = false,
@@ -130,6 +132,7 @@ class MediaRepository(private val context: Context) {
         if (Build.VERSION.SDK_INT >= 30) {
             selection.append(" AND ").append(MediaStore.Files.FileColumns.IS_TRASHED).append(" = 0")
         }
+        appendFolderFilter(selection, args, q.folders)
 
         val order = MediaStore.Files.FileColumns.DATE_MODIFIED + if (q.ascending) " ASC" else " DESC"
         val bundle = Bundle().apply {
@@ -181,6 +184,31 @@ class MediaRepository(private val context: Context) {
         return out
     }
 
+    /**
+     * Restricts a query to the given folders. Uses `RELATIVE_PATH LIKE 'DCIM/Camera/%'`
+     * (or `DATA LIKE '/storage/.../DCIM/Camera/%'` before API 29) so the database
+     * does the filtering — a few folders cost the same as none.
+     */
+    private fun appendFolderFilter(selection: StringBuilder, args: MutableList<String>, folders: Set<String>) {
+        if (folders.isEmpty()) return
+        val clean = folders.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }
+        if (clean.isEmpty()) return
+
+        selection.append(" AND (")
+        clean.forEachIndexed { i, folder ->
+            if (i > 0) selection.append(" OR ")
+            if (Build.VERSION.SDK_INT >= 29) {
+                selection.append(MediaStore.Files.FileColumns.RELATIVE_PATH).append(" LIKE ?")
+                args += "$folder/%"
+            } else {
+                @Suppress("DEPRECATION")
+                selection.append(MediaStore.Files.FileColumns.DATA).append(" LIKE ?")
+                args += "%/$folder/%"
+            }
+        }
+        selection.append(")")
+    }
+
     private fun normalizePath(raw: String, name: String): String {
         if (name.isEmpty()) return raw
         if (raw.isEmpty()) return name
@@ -214,21 +242,25 @@ class MediaRepository(private val context: Context) {
     /** Fast aggregate counts, used by the home screen. */
     data class Stats(val photos: Int, val videos: Int, val bytes: Long)
 
-    fun stats(includeVideos: Boolean = true): Stats {
+    fun stats(includeVideos: Boolean = true, folders: Set<String> = emptySet()): Stats {
         val projection = arrayOf(
             MediaStore.Files.FileColumns.MEDIA_TYPE,
             MediaStore.Files.FileColumns.SIZE,
         )
         val types = if (includeVideos) "1,3" else "1"
-        val selection = "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN ($types)" +
-            " AND ${MediaStore.Files.FileColumns.SIZE} > 0" +
-            if (Build.VERSION.SDK_INT >= 30)
-                " AND ${MediaStore.Files.FileColumns.IS_TRASHED} = 0" else ""
+        val selectionSb = StringBuilder("${MediaStore.Files.FileColumns.MEDIA_TYPE} IN ($types)")
+            .append(" AND ${MediaStore.Files.FileColumns.SIZE} > 0")
+        if (Build.VERSION.SDK_INT >= 30) {
+            selectionSb.append(" AND ${MediaStore.Files.FileColumns.IS_TRASHED} = 0")
+        }
+        val args = mutableListOf<String>()
+        appendFolderFilter(selectionSb, args, folders)
+        val selection = selectionSb.toString()
         var photos = 0
         var videos = 0
         var bytes = 0L
         runCatching {
-            resolver.query(collection, projection, selection, null, null)?.use { c ->
+            resolver.query(collection, projection, selection, args.toTypedArray(), null)?.use { c ->
                 while (c.moveToNext()) {
                     val size = c.getLong(1)
                     if (c.getInt(0) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO) videos++ else photos++
@@ -361,7 +393,7 @@ class MediaRepository(private val context: Context) {
     }
 
     /** Total item count matching the same filters used by [Query]. */
-    fun count(since: Long, includeVideos: Boolean): Int {
+    fun count(since: Long, includeVideos: Boolean, folders: Set<String> = emptySet()): Int {
         val types = if (includeVideos) "1,3" else "1"
         val selection = StringBuilder("${MediaStore.Files.FileColumns.MEDIA_TYPE} IN ($types)")
             .append(" AND ${MediaStore.Files.FileColumns.SIZE} > 0")
@@ -373,6 +405,7 @@ class MediaRepository(private val context: Context) {
         if (Build.VERSION.SDK_INT >= 30) {
             selection.append(" AND ${MediaStore.Files.FileColumns.IS_TRASHED} = 0")
         }
+        appendFolderFilter(selection, args, folders)
         return runCatching {
             resolver.query(
                 collection, arrayOf(MediaStore.Files.FileColumns._ID),

@@ -25,7 +25,22 @@ class Settings(context: Context) {
         val deviceId: String,
         /** User-editable display name, defaults to the model name. */
         val deviceName: String,
+        /**
+         * Folders the user chose to sync. Empty set means "every folder",
+         * so a fresh install keeps syncing everything without extra setup.
+         */
+        val selectedFolders: Set<String>,
     )
+
+    /**
+     * In-memory mirror of the folder whitelist.
+     *
+     * SharedPreferences.apply() persists asynchronously and keeps a reference to
+     * the Set it was given, so reading straight back can return stale data (and
+     * a caller mutating its own Set would corrupt it). Keeping the value here
+     * makes reads immediately consistent.
+     */
+    @Volatile private var folderMemo: Set<String>? = null
 
     private val _state = MutableStateFlow(snapshot())
     val state: StateFlow<Snapshot> = _state.asStateFlow()
@@ -40,6 +55,7 @@ class Settings(context: Context) {
             token = prefs.getString(KEY_TOKEN, "")!!,
             deviceId = prefs.getString(KEY_DEVICE_ID, "")!!,
             deviceName = prefs.getString(KEY_DEVICE_NAME, "")!!,
+            selectedFolders = currentFolders(),
         )
     }
 
@@ -67,6 +83,28 @@ class Settings(context: Context) {
     fun rotatePairingCode() = prefs.edit().putString(KEY_CODE, randomCode()).apply { publish() }
 
     fun rotateToken() = prefs.edit().putString(KEY_TOKEN, randomHex(24)).apply { publish() }
+
+    /** Folder whitelist, read from memory first for immediate consistency. */
+    fun currentFolders(): Set<String> {
+        folderMemo?.let { return it }
+        val stored = prefs.getStringSet(KEY_SELECTED_FOLDERS, emptySet())?.toSet() ?: emptySet()
+        folderMemo = stored
+        return stored
+    }
+
+    /** Replace the folder whitelist. An empty set disables filtering (sync all). */
+    fun setSelectedFolders(folders: Set<String>) {
+        val cleaned = folders.map { it.trim().trimEnd('/') }.filter { it.isNotEmpty() }.toSet()
+        folderMemo = cleaned
+        // Hand over a fresh copy: SharedPreferences retains the reference.
+        prefs.edit().putStringSet(KEY_SELECTED_FOLDERS, HashSet(cleaned)).apply()
+        publish()
+    }
+
+    fun selectAllFolders() = setSelectedFolders(emptySet())
+
+    /** True when the user restricted syncing to specific folders. */
+    fun hasFolderFilter(): Boolean = currentFolders().isNotEmpty()
 
     fun setDeviceName(name: String) {
         val trimmed = name.trim().take(40)
@@ -104,6 +142,7 @@ class Settings(context: Context) {
         private const val KEY_TOKEN = "token"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_DEVICE_NAME = "device_name"
+        private const val KEY_SELECTED_FOLDERS = "selected_folders"
 
         fun randomHex(bytes: Int): String {
             val b = ByteArray(bytes)
