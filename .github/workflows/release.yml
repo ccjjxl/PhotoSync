@@ -290,11 +290,20 @@ jobs:
 
       - name: Collect files
         run: |
+          set -euo pipefail
           mkdir -p release
-          find artifacts -type f -exec cp {} release/ \;
+          # Drop the per-job checksum files; we regenerate one authoritative list.
+          find artifacts -type f ! -name SHA256SUMS.txt -exec cp {} release/ \;
           cd release
-          # Re-generate checksums over the final file set.
-          sha256sum * > SHA256SUMS.txt
+          # Never include SHA256SUMS.txt in its own contents: the shell creates
+          # the file before globbing, so `sha256sum *` would record the hash of an
+          # empty file and `sha256sum -c` would then always fail.
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' \
+            | sort | xargs sha256sum > SHA256SUMS.txt
+          echo '--- SHA256SUMS.txt ---'
+          cat SHA256SUMS.txt
+          echo '--- self-check ---'
+          sha256sum -c SHA256SUMS.txt
           ls -lh
 
       - name: Extract release notes from CHANGELOG
