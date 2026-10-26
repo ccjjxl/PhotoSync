@@ -297,7 +297,7 @@ final class HttpServer: @unchecked Sendable {
 
         case .bytes(let data):
             var head = statusLine(response.status)
-            head += headerLines(response.headers, length: data.count, extra: nil)
+            head += headerLines(response.headers, length: Int64(data.count), extra: nil)
             var payload = Data(head.utf8)
             payload.append(data)
             connection.send(content: payload, completion: .contentProcessed { _ in

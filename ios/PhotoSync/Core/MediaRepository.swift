@@ -114,12 +114,10 @@ final class MediaRepository: @unchecked Sendable {
         var predicates: [NSPredicate] = []
         var mediaTypes: [PHAssetMediaType] = [.image]
         if includeVideos { mediaTypes.append(.video) }
-        predicates.append(NSPredicate(format: "mediaType IN %@", mediaTypes.map { $0.rawValue }))
+        predicates.append(NSPredicate(format: "mediaType IN %@", mediaTypes.map { NSNumber(value: $0.rawValue) }))
         if since > 0 {
-            predicates.append(NSPredicate(
-                format: "modificationDate >= %@",
-                Date(timeIntervalSince1970: TimeInterval(since))
-            ))
+            let cutoff = Date(timeIntervalSince1970: TimeInterval(since)) as NSDate
+            predicates.append(NSPredicate(format: "modificationDate >= %@", cutoff))
         }
         options.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
 
