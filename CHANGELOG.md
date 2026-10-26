@@ -5,6 +5,16 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 1.3.1 — 2026-10-26
+
+### 修复
+- iOS 首页「开启同步」按钮与安卓不一致
+  - 图标此前混用 SF Symbol（`arrow.triangle.2.circlepath`）与部分圆弧，
+    与安卓自行绘制的「双弧 + 两个三角箭头」差异明显
+  - 改为用 `Canvas` 按安卓 Compose 的同一套坐标与角度绘制，两端完全一致
+  - 按钮尺寸 62 → 64、图标 32 → 34，主色改用与安卓相同的 `0xFF2C6BFF`；
+    停止方块恢复 0.55~1.0 的呼吸动画
+
 ## 1.3.0 — 2026-10-26
 
 ### 新增

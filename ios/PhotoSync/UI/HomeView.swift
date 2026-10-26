@@ -9,6 +9,8 @@ struct HomeView: View {
     @State private var showAlbums = false
     @State private var showHelp = false
     @State private var browserURL: URL?
+    /// Mirrors Android's animated `glow` for the stop square.
+    @State private var stopGlow: CGFloat = 1
 
     var body: some View {
         NavigationView {
@@ -45,6 +47,11 @@ struct HomeView: View {
                 HelpView().environmentObject(model)
             }
             .safariSheet(url: $browserURL)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
+                    stopGlow = 0
+                }
+            }
         }
     }
 
@@ -103,14 +110,14 @@ struct HomeView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(model.running ? .white.opacity(0.22) : .white)
-                            .frame(width: 62, height: 62)
+                            .fill(model.running ? Color.white.opacity(0.2) : Color.white)
+                            .frame(width: 64, height: 64)
                         if model.running {
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(.white.opacity(0.85))
+                                .fill(Color.white.opacity(0.55 + 0.45 * stopGlow))
                                 .frame(width: 20, height: 20)
                         } else {
-                            SyncGlyph(color: Theme.accent, size: 32)
+                            SyncGlyph(color: Color(red: 0.17, green: 0.42, blue: 1.0), size: 34)
                         }
                     }
                 }

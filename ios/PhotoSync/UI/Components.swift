@@ -104,24 +104,63 @@ struct PulseDot: View {
 }
 
 /// The sync glyph, drawn with shapes so there's no image asset to ship.
+/// The sync glyph, drawn exactly like Android's `SyncGlyph` (Compose Canvas).
+///
+/// Android draws two 130° arcs plus two triangular arrow heads; the previous iOS
+/// version mixed partial circles with a SF Symbol, which looked different from
+/// the Android app. Shapes here mirror the Compose code 1:1.
 struct SyncGlyph: View {
     var color: Color = .white
     var size: CGFloat = 34
 
     var body: some View {
-        ZStack {
-            Circle()
-                .trim(from: 0.12, to: 0.62)
-                .stroke(color, style: StrokeStyle(lineWidth: size * 0.11, lineCap: .round))
-                .rotationEffect(.degrees(-30))
-            Circle()
-                .trim(from: 0.62, to: 0.92)
-                .stroke(color.opacity(0.55), style: StrokeStyle(lineWidth: size * 0.11, lineCap: .round))
-                .rotationEffect(.degrees(150))
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.system(size: size * 0.44, weight: .semibold))
-                .foregroundStyle(color)
-                .opacity(0.9)
+        Canvas { context, canvasSize in
+            let width = canvasSize.width
+            let height = canvasSize.height
+            let radius = min(width, height) / 2 * 0.62
+            let center = CGPoint(x: width / 2, y: height / 2)
+            let strokeWidth = min(width, height) * 0.11
+
+            func arc(start: Double, sweep: Double, opacity: Double) {
+                var path = Path()
+                path.addArc(
+                    center: center,
+                    radius: radius,
+                    startAngle: .degrees(start),
+                    endAngle: .degrees(start + sweep),
+                    clockwise: false
+                )
+                context.stroke(
+                    path,
+                    with: .color(color.opacity(opacity)),
+                    style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round)
+                )
+            }
+
+            func triangle(_ points: [CGPoint], opacity: Double) {
+                var path = Path()
+                path.move(to: points[0])
+                path.addLine(to: points[1])
+                path.addLine(to: points[2])
+                path.closeSubpath()
+                context.fill(path, with: .color(color.opacity(opacity)))
+            }
+
+            // Two facing arcs (200°+130° and 20°+130°), as in Compose.
+            arc(start: 200, sweep: 130, opacity: 1.0)
+            arc(start: 20, sweep: 130, opacity: 0.55)
+
+            triangle([
+                CGPoint(x: center.x + radius * 0.98, y: center.y - radius * 0.42),
+                CGPoint(x: center.x + radius * 1.32, y: center.y - radius * 0.12),
+                CGPoint(x: center.x + radius * 0.78, y: center.y + radius * 0.10),
+            ], opacity: 0.9)
+
+            triangle([
+                CGPoint(x: center.x - radius * 0.98, y: center.y + radius * 0.42),
+                CGPoint(x: center.x - radius * 1.32, y: center.y + radius * 0.12),
+                CGPoint(x: center.x - radius * 0.78, y: center.y - radius * 0.10),
+            ], opacity: 0.45)
         }
         .frame(width: size, height: size)
     }
