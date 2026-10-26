@@ -21,7 +21,7 @@ import (
 
 // version is overridden at build time with -X main.version=… (see build.sh / CI).
 // The fallback matches VERSION in the repo root.
-var version = "1.3.1"
+var version = "1.3.2"
 
 const usageText = `PhotoSync 桌面客户端 %s — 快速把安卓照片同步到电脑
 
