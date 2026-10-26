@@ -1,0 +1,30 @@
+# Android
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/captures/
+*.iml
+*.apk
+*.aab
+# ---- 签名密钥：绝对不要提交 ----
+android/keystore/
+android/keystore.properties
+!android/keystore.properties.example
+*.jks
+*.keystore
+*.p12
+!android/app/debug.keystore
+
+# Go
+pc/dist/
+pc/sync-client
+pc/sync-client.exe
+
+# OS / editors
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/

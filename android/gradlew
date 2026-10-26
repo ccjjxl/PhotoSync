@@ -1,0 +1,22 @@
+#!/bin/sh
+# Gradle wrapper launcher (resolves the distribution declared in
+# gradle/wrapper/gradle-wrapper.properties).
+set -e
+
+APP_HOME=$(cd "$(dirname "$0")" && pwd)
+PROPS="$APP_HOME/gradle/wrapper/gradle-wrapper.properties"
+
+DIST_URL=$(grep -E '^distributionUrl=' "$PROPS" | cut -d'=' -f2- | sed 's/\\//g')
+DIST_NAME=$(basename "$DIST_URL" .zip)
+
+CACHE="$HOME/.gradle/wrapper/dists/$DIST_NAME"
+GRADLE_BIN=$(find "$CACHE" -maxdepth 4 -name gradle -type f 2>/dev/null | grep -m1 'bin/gradle$' || true)
+
+if [ -z "$GRADLE_BIN" ]; then
+  echo "Gradle distribution '$DIST_NAME' not found in $CACHE" >&2
+  echo "Download it from: $DIST_URL" >&2
+  echo "or install Gradle 8.14.3 and run: gradle wrapper" >&2
+  exit 1
+fi
+
+exec "$GRADLE_BIN" "$@"

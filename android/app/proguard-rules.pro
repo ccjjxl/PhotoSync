@@ -1,0 +1,2 @@
+-keep class dev.photosync.** { *; }
+-dontwarn org.jetbrains.annotations.**
