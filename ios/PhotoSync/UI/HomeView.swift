@@ -10,7 +10,7 @@ struct HomeView: View {
     @State private var showHelp = false
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ScrollView {
                 VStack(spacing: 18) {
                     if !model.authorized {
@@ -316,24 +316,25 @@ struct HomeView: View {
             Text("本次会话")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
+            // Mirrors the Android layout: bytes served + file count on the left,
+            // cache size on the right.
             Card {
-                HStack {
+                HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(humanBytes(model.bytes))
+                        Text(humanBytes(model.servedBytes))
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(Theme.mint)
-                        Text("可供传输 \(model.photos + model.videos) 个文件")
+                        Text("已传输 \(model.servedFiles) 个文件")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("保存目录")
+                        Text("缩略图缓存")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Text(model.folderName)
-                            .font(.caption.monospaced())
-                            .lineLimit(1)
+                        Text(humanBytes(model.cacheBytes))
+                            .font(.subheadline.weight(.medium))
                     }
                 }
             }

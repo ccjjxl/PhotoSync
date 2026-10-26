@@ -12,7 +12,7 @@ struct SettingsView: View {
     @State private var showRotateTokenConfirm = false
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     deviceIdentity
@@ -22,6 +22,8 @@ struct SettingsView: View {
                     albumSection
                     Divider()
                     switches
+                    Divider()
+                    storageSection
                     Divider()
                     securityCard
                     systemButton
@@ -184,6 +186,43 @@ struct SettingsView: View {
                     Text("免配对访问").font(.subheadline.weight(.medium))
                     Text("开启后任意设备无需配对码即可读取数据（仅建议在可信网络中开启）")
                         .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// Cache management — the iOS counterpart of Android's "存储" section.
+    private var storageSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("存储")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+            Card {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("原图缓存")
+                                .font(.subheadline)
+                            Text("\(humanBytes(model.cacheBytes)) · 仅用于加速浏览，可随时清理")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            model.clearCache()
+                        } label: {
+                            Text("清理")
+                                .font(.caption.weight(.medium))
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 8)
+                                .background(Color(.tertiarySystemFill))
+                                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Text("iOS 需要先把 iCloud 原图下载到本地才能传输；清理后下次同步会重新下载。")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

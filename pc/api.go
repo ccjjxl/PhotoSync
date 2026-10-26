@@ -123,20 +123,50 @@ func (d DeviceInfo) BestIP() string {
 	return ""
 }
 
+// FlexString accepts a JSON string or number. Phone implementations differ:
+// Android reports MediaStore ids as numbers, iOS reports PhotoKit local
+// identifiers as strings.
+type FlexString string
+
+func (f *FlexString) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "null" {
+		*f = ""
+		return nil
+	}
+	if len(trimmed) >= 2 && trimmed[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		*f = FlexString(s)
+		return nil
+	}
+	*f = FlexString(trimmed)
+	return nil
+}
+
+func (f FlexString) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(f))
+}
+
 // MediaItem is one photo or video on the phone.
 type MediaItem struct {
-	ID     int64  `json:"id"`
-	Name   string `json:"name"`
-	Path   string `json:"path"`
-	Folder string `json:"folder"`
-	Size   int64  `json:"size"`
-	Mtime  int64  `json:"mtime"`
-	Taken  int64  `json:"taken"`
-	Mime   string `json:"mime"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	Video  bool   `json:"video"`
-	Key    string `json:"key"`
+	// ID is opaque: Android sends a numeric MediaStore id, iOS a PhotoKit
+	// localIdentifier string. Keep it as a string on the wire type and convert
+	// when talking to Android.
+	ID     FlexString `json:"id"`
+	Name   string     `json:"name"`
+	Path   string     `json:"path"`
+	Folder string     `json:"folder"`
+	Size   int64      `json:"size"`
+	Mtime  int64      `json:"mtime"`
+	Taken  int64      `json:"taken"`
+	Mime   string     `json:"mime"`
+	Width  int        `json:"width"`
+	Height int        `json:"height"`
+	Video  bool       `json:"video"`
+	Key    string     `json:"key"`
 }
 
 // ListResponse is one page from /api/list.
@@ -368,12 +398,12 @@ func (c *Client) Folders(ctx context.Context) ([]FolderEntry, bool, error) {
 }
 
 // FileURL is the direct download URL for an item.
-func (c *Client) FileURL(id int64) string {
-	return fmt.Sprintf("%s/api/file?id=%d", c.base, id)
+func (c *Client) FileURL(id FlexString) string {
+	return c.base + "/api/file?id=" + url.QueryEscape(string(id))
 }
 
 // OpenFile starts a download, optionally resuming from byte offset.
-func (c *Client) OpenFile(ctx context.Context, id int64, offset int64) (*http.Response, error) {
+func (c *Client) OpenFile(ctx context.Context, id FlexString, offset int64) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.FileURL(id), nil)
 	if err != nil {
 		return nil, err

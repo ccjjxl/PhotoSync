@@ -38,6 +38,11 @@ final class AppModel: ObservableObject {
     @Published var albums: [AlbumInfo] = []
     @Published var selectedAlbums: Set<String> = []
     @Published var recentThumbnails: [RecentThumb] = []
+    /// Bytes transferred to the desktop client this session.
+    @Published var servedBytes: Int64 = 0
+    @Published var servedFiles: Int64 = 0
+    /// On-disk spool/thumbnail cache.
+    @Published var cacheBytes: Int64 = 0
 
     struct RecentThumb: Identifiable {
         let id: String
@@ -249,7 +254,19 @@ final class AppModel: ObservableObject {
         selectedAlbums = snapshot.selectedAlbums
         running = engine.running
         lastError = engine.lastError
+        servedBytes = engine.servedBytes
+        servedFiles = engine.servedFiles
+        cacheBytes = engine.cacheSize()
         addresses = NetworkInfo.addresses().map { "http://\($0.ip):\(snapshot.port)" }
+    }
+
+    func clearCache() {
+        do {
+            try engine.clearCache()
+            cacheBytes = 0
+        } catch {
+            lastError = "清理缓存失败：\(error.localizedDescription)"
+        }
     }
 
     /// Copy helper used by the UI.

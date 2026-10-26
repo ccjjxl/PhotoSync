@@ -263,7 +263,13 @@ final class MediaRepository: @unchecked Sendable {
                           userInfo: [NSLocalizedDescriptionKey: "没有可用的原始文件"])
         }
         let options = PHAssetResourceRequestOptions()
+        // Downloading from iCloud is slow but legitimate; allow it, and report
+        // progress so the desktop client's socket does not look dead.
         options.isNetworkAccessAllowed = true
+        options.progressHandler = { progress in
+            Self.reportDownloadProgress(progress)
+        }
+
         let semaphore = DispatchSemaphore(value: 0)
         var thrown: Error?
         PHAssetResourceManager.default().writeData(
@@ -272,8 +278,41 @@ final class MediaRepository: @unchecked Sendable {
             thrown = error
             semaphore.signal()
         }
-        _ = semaphore.wait(timeout: .now() + 120)
+        // Generous budget: a 4K video pulled from iCloud can take minutes on a
+        // slow uplink. Timing out early would silently hand back a truncated
+        // file, so wait until the download finishes and verify the size after.
+        if semaphore.wait(timeout: .now() + 900) == .timedOut {
+            throw NSError(domain: "PhotoSync", code: 2, userInfo: [
+                NSLocalizedDescriptionKey: "iCloud 下载超时（15 分钟）",
+            ])
+        }
         if let thrown { throw thrown }
+
+        // Guard against PhotoKit reporting success with an incomplete file.
+        let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
+        if resourceSize(resource).map({ $0 > 0 && size != $0 }) == true {
+            throw NSError(domain: "PhotoSync", code: 3, userInfo: [
+                NSLocalizedDescriptionKey: "下载不完整（\(size) 字节）",
+            ])
+        }
+    }
+
+    /// Latest iCloud download progress (0…1), for diagnostics.
+    private static let progressLock = NSLock()
+    private static var _iCloudProgress: Double = 0
+
+    static var iCloudProgress: Double {
+        progressLock.lock()
+        defer { progressLock.unlock() }
+        return _iCloudProgress
+    }
+
+    /// Called from PhotoKit's background queue while fetching from iCloud.
+    private static func reportDownloadProgress(_ progress: Double) {
+        guard progress > 0, progress < 1 else { return }
+        progressLock.lock()
+        _iCloudProgress = progress
+        progressLock.unlock()
     }
 
     /// Decodes a thumbnail for grid display / the `/api/thumb` endpoint.
